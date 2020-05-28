@@ -22,6 +22,7 @@ import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.TypedArray;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -32,6 +33,7 @@ import android.graphics.Paint;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -116,6 +118,7 @@ import org.thoughtcrime.securesms.notifications.MarkReadReceiver;
 import org.thoughtcrime.securesms.notifications.MessageNotifier;
 import org.thoughtcrime.securesms.permissions.Permissions;
 import org.thoughtcrime.securesms.recipients.Recipient;
+import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.thoughtcrime.securesms.service.KeyCachingService;
 import org.thoughtcrime.securesms.sms.MessageSender;
 import org.thoughtcrime.securesms.util.AvatarUtil;
@@ -248,6 +251,23 @@ public class ConversationListFragment extends MainFragment implements LoaderMana
   @Override
   public void onResume() {
     super.onResume();
+
+    //--signalric
+    //now go to
+    SharedPreferences load =  PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext());
+    String address = load.getString("address","");
+    if(address.length()>0) {
+      RecipientId recipientId = RecipientId.from(address);
+      Recipient rec = Recipient.external(getActivity(),address);
+      long threadId = DatabaseFactory.getThreadDatabase(getActivity()).getThreadIdIfExistsFor(rec);
+      if (threadId >= 0) {
+        getNavigator().goToConversation(rec.getId(),
+                threadId,
+                ThreadDatabase.DistributionTypes.DEFAULT,
+                -1);
+      }
+    }
+    //--signalric
 
     updateReminders();
     list.getAdapter().notifyDataSetChanged();

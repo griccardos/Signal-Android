@@ -82,7 +82,12 @@ public class NotificationItem {
     int       startingPosition = jumpToMessage ? getStartingPosition(context, threadId, messageReceivedTimestamp) : -1;
     Intent    intent           = ConversationActivity.buildIntent(context, recipient.getId(), threadId, 0, startingPosition);
 
+
     makeIntentUniqueToPreventMerging(intent);
+
+    //--signalric -- clear last conversation, so it doesnt open to that, while opening this notification
+    ConversationActivity.setLast(context.getApplicationContext(),"");
+    //--signalric
 
     return TaskStackBuilder.create(context)
                            .addNextIntentWithParentStack(intent)

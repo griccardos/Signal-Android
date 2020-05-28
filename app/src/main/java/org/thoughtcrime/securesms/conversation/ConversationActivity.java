@@ -24,6 +24,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
@@ -37,6 +38,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Vibrator;
+import android.preference.PreferenceManager;
 import android.provider.Browser;
 import android.provider.ContactsContract;
 import android.provider.Telephony;
@@ -366,6 +368,18 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     return intent;
   }
 
+  //--signalric
+  //save last address
+  public static void setLast(Context applicationContext,String address)
+  {
+    SharedPreferences save = PreferenceManager.getDefaultSharedPreferences(applicationContext);
+    SharedPreferences.Editor mEditor = save.edit();
+
+    mEditor.putString("address",address);
+    mEditor.apply();
+  }
+  //--signalric
+
   @Override
   protected void onPreCreate() {
     dynamicTheme.onCreate(this);
@@ -488,6 +502,12 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     composeText.setTransport(sendButton.getSelectedTransport());
 
     Recipient recipientSnapshot = recipient.get();
+
+    //--signalric
+    //set last address
+    String address=recipientSnapshot.getSmsAddress().get();
+    setLast(getApplicationContext(), address);
+    //--signalric
 
     titleView.setTitle(glideRequests, recipientSnapshot);
     setActionBarColor(recipientSnapshot.getColor());
@@ -873,6 +893,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   @Override
   public void onBackPressed() {
     Log.d(TAG, "onBackPressed()");
+    //--signalric
+    //remove last address
+    setLast(getApplicationContext(),"");
+    //--signalric
+
     if (reactionOverlay.isShowing())  reactionOverlay.hide();
     else if (container.isInputOpen()) container.hideCurrentInput(composeText);
     else                              super.onBackPressed();
