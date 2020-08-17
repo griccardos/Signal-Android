@@ -104,7 +104,7 @@ import static org.whispersystems.libsignal.SessionCipher.SESSION_LOCK;
  * @author Moxie Marlinspike
  */
 @SuppressLint("StaticFieldLeak")
-public class VerifyIdentityActivity extends PassphraseRequiredActionBarActivity implements ScanListener, View.OnClickListener {
+public class VerifyIdentityActivity extends PassphraseRequiredActivity implements ScanListener, View.OnClickListener {
 
   private static final String TAG = Log.tag(VerifyIdentityActivity.class);
 
@@ -307,7 +307,7 @@ public class VerifyIdentityActivity extends PassphraseRequiredActionBarActivity 
       byte[] localId;
       byte[] remoteId;
 
-      if (FeatureFlags.uuids() && recipient.resolve().getUuid().isPresent()) {
+      if (FeatureFlags.verifyV2() && recipient.resolve().getUuid().isPresent()) {
         Log.i(TAG, "Using UUID (version 2).");
         version  = 2;
         localId  = UuidUtil.toByteArray(TextSecurePreferences.getLocalUuid(requireContext()));
@@ -486,7 +486,7 @@ public class VerifyIdentityActivity extends PassphraseRequiredActionBarActivity 
     }
 
     private void setRecipientText(Recipient recipient) {
-      description.setText(Html.fromHtml(String.format(getActivity().getString(R.string.verify_display_fragment__if_you_wish_to_verify_the_security_of_your_end_to_end_encryption_with_s), recipient.toShortString(getContext()))));
+      description.setText(Html.fromHtml(String.format(getActivity().getString(R.string.verify_display_fragment__if_you_wish_to_verify_the_security_of_your_end_to_end_encryption_with_s), recipient.getDisplayName(getContext()))));
       description.setMovementMethod(LinkMovementMethod.getInstance());
     }
 

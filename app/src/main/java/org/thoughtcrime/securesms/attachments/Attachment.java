@@ -1,9 +1,11 @@
 package org.thoughtcrime.securesms.attachments;
 
 import android.net.Uri;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.thoughtcrime.securesms.audio.AudioHash;
 import org.thoughtcrime.securesms.blurhash.BlurHash;
 import org.thoughtcrime.securesms.database.AttachmentDatabase;
 import org.thoughtcrime.securesms.database.AttachmentDatabase.TransformProperties;
@@ -37,6 +39,7 @@ public abstract class Attachment {
   private final String fastPreflightId;
 
   private final boolean voiceNote;
+  private final boolean borderless;
   private final int     width;
   private final int     height;
   private final boolean quote;
@@ -51,14 +54,32 @@ public abstract class Attachment {
   @Nullable
   private final BlurHash blurHash;
 
+  @Nullable
+  private final AudioHash audioHash;
+
   @NonNull
   private final TransformProperties transformProperties;
 
-  public Attachment(@NonNull String contentType, int transferState, long size, @Nullable String fileName,
-                    int cdnNumber, @Nullable String location, @Nullable String key, @Nullable String relay,
-                    @Nullable byte[] digest, @Nullable String fastPreflightId, boolean voiceNote,
-                    int width, int height, boolean quote, long uploadTimestamp, @Nullable String caption,
-                    @Nullable StickerLocator stickerLocator, @Nullable BlurHash blurHash,
+  public Attachment(@NonNull String contentType,
+                    int transferState,
+                    long size,
+                    @Nullable String fileName,
+                    int cdnNumber,
+                    @Nullable String location,
+                    @Nullable String key,
+                    @Nullable String relay,
+                    @Nullable byte[] digest,
+                    @Nullable String fastPreflightId,
+                    boolean voiceNote,
+                    boolean borderless,
+                    int width,
+                    int height,
+                    boolean quote,
+                    long uploadTimestamp,
+                    @Nullable String caption,
+                    @Nullable StickerLocator stickerLocator,
+                    @Nullable BlurHash blurHash,
+                    @Nullable AudioHash audioHash,
                     @Nullable TransformProperties transformProperties)
   {
     this.contentType         = contentType;
@@ -72,6 +93,7 @@ public abstract class Attachment {
     this.digest              = digest;
     this.fastPreflightId     = fastPreflightId;
     this.voiceNote           = voiceNote;
+    this.borderless          = borderless;
     this.width               = width;
     this.height              = height;
     this.quote               = quote;
@@ -79,6 +101,7 @@ public abstract class Attachment {
     this.stickerLocator      = stickerLocator;
     this.caption             = caption;
     this.blurHash            = blurHash;
+    this.audioHash           = audioHash;
     this.transformProperties = transformProperties != null ? transformProperties : TransformProperties.empty();
   }
 
@@ -144,6 +167,10 @@ public abstract class Attachment {
     return voiceNote;
   }
 
+  public boolean isBorderless() {
+    return borderless;
+  }
+
   public int getWidth() {
     return width;
   }
@@ -170,6 +197,10 @@ public abstract class Attachment {
 
   public @Nullable BlurHash getBlurHash() {
     return blurHash;
+  }
+
+  public @Nullable AudioHash getAudioHash() {
+    return audioHash;
   }
 
   public @Nullable String getCaption() {

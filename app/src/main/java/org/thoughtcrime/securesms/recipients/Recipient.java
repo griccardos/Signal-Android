@@ -10,6 +10,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
+import com.annimon.stream.Stream;
+
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.color.MaterialColor;
 import org.thoughtcrime.securesms.contacts.avatars.ContactColors;
@@ -24,25 +26,28 @@ import org.thoughtcrime.securesms.contacts.avatars.TransparentContactPhoto;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.IdentityDatabase.VerifiedStatus;
 import org.thoughtcrime.securesms.database.RecipientDatabase;
+import org.thoughtcrime.securesms.database.RecipientDatabase.MentionSetting;
 import org.thoughtcrime.securesms.database.RecipientDatabase.RegisteredState;
 import org.thoughtcrime.securesms.database.RecipientDatabase.UnidentifiedAccessMode;
 import org.thoughtcrime.securesms.database.RecipientDatabase.VibrateState;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.groups.GroupId;
-import org.thoughtcrime.securesms.jobs.DirectoryRefreshJob;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.notifications.NotificationChannels;
 import org.thoughtcrime.securesms.phonenumbers.NumberUtil;
 import org.thoughtcrime.securesms.phonenumbers.PhoneNumberFormatter;
 import org.thoughtcrime.securesms.profiles.ProfileName;
 import org.thoughtcrime.securesms.util.FeatureFlags;
+import org.thoughtcrime.securesms.util.StringUtil;
 import org.thoughtcrime.securesms.util.Util;
+import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.libsignal.util.guava.Preconditions;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 import org.whispersystems.signalservice.api.util.UuidUtil;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -53,7 +58,7 @@ import static org.thoughtcrime.securesms.database.RecipientDatabase.InsightsBann
 
 public class Recipient {
 
-  public static final Recipient UNKNOWN = new Recipient(RecipientId.UNKNOWN, new RecipientDetails());
+  public static final Recipient UNKNOWN = new Recipient(RecipientId.UNKNOWN, new RecipientDetails(), true);
 
   private static final FallbackPhotoProvider DEFAULT_FALLBACK_PHOTO_PROVIDER = new FallbackPhotoProvider();
   private static final String                TAG = Log.tag(Recipient.class);
@@ -88,6 +93,7 @@ public class Recipient {
   private final String                 profileAvatar;
   private final boolean                hasProfileImage;
   private final boolean                profileSharing;
+  private final long                   lastProfileFetch;
   private final String                 notificationChannel;
   private final UnidentifiedAccessMode unidentifiedAccessMode;
   private final boolean                forceSmsSelection;
@@ -97,6 +103,7 @@ public class Recipient {
   private final byte[]                 storageId;
   private final byte[]                 identityKey;
   private final VerifiedStatus         identityStatus;
+  private final MentionSetting         mentionSetting;
 
 
   /**
@@ -120,12 +127,23 @@ public class Recipient {
     return live(id).resolve();
   }
 
+  @WorkerThread
+  public static @NonNull List<Recipient> resolvedList(@NonNull Collection<RecipientId> ids) {
+    List<Recipient> recipients = new ArrayList<>(ids.size());
+
+    for (RecipientId recipientId : ids) {
+      recipients.add(resolved(recipientId));
+    }
+
+    return recipients;
+  }
+
   /**
    * Returns a fully-populated {@link Recipient} and associates it with the provided username.
    */
   @WorkerThread
   public static @NonNull Recipient externalUsername(@NonNull Context context, @NonNull UUID uuid, @NonNull String username) {
-    Recipient recipient = externalPush(context, uuid, null);
+    Recipient recipient = externalPush(context, uuid, null, false);
     DatabaseFactory.getRecipientDatabase(context).setUsername(recipient.getId(), username);
     return recipient;
   }
@@ -133,11 +151,39 @@ public class Recipient {
   /**
    * Returns a fully-populated {@link Recipient} based off of a {@link SignalServiceAddress},
    * creating one in the database if necessary. Convenience overload of
-   * {@link #externalPush(Context, UUID, String)}
+   * {@link #externalPush(Context, UUID, String, boolean)}
    */
   @WorkerThread
   public static @NonNull Recipient externalPush(@NonNull Context context, @NonNull SignalServiceAddress signalServiceAddress) {
-    return externalPush(context, signalServiceAddress.getUuid().orNull(), signalServiceAddress.getNumber().orNull());
+    return externalPush(context, signalServiceAddress.getUuid().orNull(), signalServiceAddress.getNumber().orNull(), false);
+  }
+
+  /**
+   * Returns a fully-populated {@link Recipient} based off of a {@link SignalServiceAddress},
+   * creating one in the database if necessary. We special-case GV1 members because we want to
+   * prioritize E164 addresses and not use the UUIDs if possible.
+   */
+  @WorkerThread
+  public static @NonNull Recipient externalGV1Member(@NonNull Context context, @NonNull SignalServiceAddress address) {
+    if (address.getNumber().isPresent()) {
+      return externalPush(context, null, address.getNumber().get(), false);
+    } else {
+      return externalPush(context, address.getUuid().orNull(), null, false);
+    }
+  }
+
+  /**
+   * Returns a fully-populated {@link Recipient} based off of a {@link SignalServiceAddress},
+   * creating one in the database if necessary. This should only used for high-trust sources,
+   * which are limited to:
+   * - Envelopes
+   * - UD Certs
+   * - CDS
+   * - Storage Service
+   */
+  @WorkerThread
+  public static @NonNull Recipient externalHighTrustPush(@NonNull Context context, @NonNull SignalServiceAddress signalServiceAddress) {
+    return externalPush(context, signalServiceAddress.getUuid().orNull(), signalServiceAddress.getNumber().orNull(), true);
   }
 
   /**
@@ -148,69 +194,20 @@ public class Recipient {
    * In particular, while we'll eventually get the UUID of a user created via a phone number
    * (through a directory sync), the only way we can store the phone number is by retrieving it from
    * sent messages and whatnot. So we should store it when available.
+   *
+   * @param highTrust This should only be set to true if the source of the E164-UUID pairing is one
+   *                  that can be trusted as accurate (like an envelope).
    */
   @WorkerThread
-  public static @NonNull Recipient externalPush(@NonNull Context context, @Nullable UUID uuid, @Nullable String e164) {
+  public static @NonNull Recipient externalPush(@NonNull Context context, @Nullable UUID uuid, @Nullable String e164, boolean highTrust) {
     if (UuidUtil.UNKNOWN_UUID.equals(uuid)) {
       throw new AssertionError();
     }
 
-    RecipientDatabase     db       = DatabaseFactory.getRecipientDatabase(context);
-    Optional<RecipientId> uuidUser = uuid != null ? db.getByUuid(uuid) : Optional.absent();
-    Optional<RecipientId> e164User = e164 != null ? db.getByE164(e164) : Optional.absent();
+    RecipientDatabase db          = DatabaseFactory.getRecipientDatabase(context);
+    RecipientId       recipientId = db.getAndPossiblyMerge(uuid, e164, highTrust);
 
-    if (uuidUser.isPresent()) {
-      Recipient recipient = resolved(uuidUser.get());
-
-      if (e164 != null && !recipient.getE164().isPresent() && !e164User.isPresent()) {
-        db.setPhoneNumber(recipient.getId(), e164);
-      }
-
-      return resolved(recipient.getId());
-    } else if (e164User.isPresent()) {
-      Recipient recipient = resolved(e164User.get());
-
-      if (uuid != null && !recipient.getUuid().isPresent()) {
-        db.markRegistered(recipient.getId(), uuid);
-      } else if (!recipient.isRegistered()) {
-        db.markRegistered(recipient.getId());
-
-        if (FeatureFlags.uuids()) {
-          Log.i(TAG, "No UUID! Scheduling a fetch.");
-          ApplicationDependencies.getJobManager().add(new DirectoryRefreshJob(recipient, false));
-        }
-      }
-
-      return resolved(recipient.getId());
-    } else if (uuid != null) {
-      if (FeatureFlags.uuids() || e164 != null) {
-        RecipientId id = db.getOrInsertFromUuid(uuid);
-        db.markRegistered(id, uuid);
-
-        if (e164 != null) {
-          db.setPhoneNumber(id, e164);
-        }
-
-        return resolved(id);
-      } else {
-        throw new UuidRecipientError();
-      }
-    } else if (e164 != null) {
-      Recipient recipient = resolved(db.getOrInsertFromE164(e164));
-
-      if (!recipient.isRegistered()) {
-        db.markRegistered(recipient.getId());
-
-        if (FeatureFlags.uuids()) {
-          Log.i(TAG, "No UUID! Scheduling a fetch.");
-          ApplicationDependencies.getJobManager().add(new DirectoryRefreshJob(recipient, false));
-        }
-      }
-
-      return resolved(recipient.getId());
-    } else {
-      throw new AssertionError("You must provide either a UUID or phone number!");
-    }
+    return resolved(recipientId);
   }
 
   /**
@@ -226,7 +223,7 @@ public class Recipient {
     RecipientId       id = null;
 
     if (UuidUtil.isUuid(identifier)) {
-      throw new UuidRecipientError();
+      throw new AssertionError("UUIDs are not valid system contact identifiers!");
     } else if (NumberUtil.isValidEmail(identifier)) {
       id = db.getOrInsertFromEmail(identifier);
     } else {
@@ -251,7 +248,7 @@ public class Recipient {
    * or serialized groupId.
    *
    * If the identifier is a UUID of a Signal user, prefer using
-   * {@link #externalPush(Context, UUID, String)} or its overload, as this will let us associate
+   * {@link #externalPush(Context, UUID, String, boolean)} or its overload, as this will let us associate
    * the phone number with the recipient.
    */
   @WorkerThread
@@ -263,18 +260,7 @@ public class Recipient {
 
     if (UuidUtil.isUuid(identifier)) {
       UUID uuid = UuidUtil.parseOrThrow(identifier);
-
-      if (FeatureFlags.uuids()) {
-        id = db.getOrInsertFromUuid(uuid);
-      } else {
-        Optional<RecipientId> possibleId = db.getByUuid(uuid);
-
-        if (possibleId.isPresent()) {
-          id = possibleId.get();
-        } else {
-          throw new UuidRecipientError();
-        }
-      }
+      id = db.getOrInsertFromUuid(uuid);
     } else if (GroupId.isEncodedGroup(identifier)) {
       id = db.getOrInsertFromGroupId(GroupId.parseOrThrow(identifier));
     } else if (NumberUtil.isValidEmail(identifier)) {
@@ -323,6 +309,7 @@ public class Recipient {
     this.profileAvatar          = null;
     this.hasProfileImage        = false;
     this.profileSharing         = false;
+    this.lastProfileFetch       = 0;
     this.notificationChannel    = null;
     this.unidentifiedAccessMode = UnidentifiedAccessMode.DISABLED;
     this.forceSmsSelection      = false;
@@ -331,11 +318,12 @@ public class Recipient {
     this.storageId              = null;
     this.identityKey            = null;
     this.identityStatus         = VerifiedStatus.DEFAULT;
+    this.mentionSetting         = MentionSetting.ALWAYS_NOTIFY;
   }
 
-  Recipient(@NonNull RecipientId id, @NonNull RecipientDetails details) {
+  public Recipient(@NonNull RecipientId id, @NonNull RecipientDetails details, boolean resolved) {
     this.id                     = id;
-    this.resolving              = false;
+    this.resolving              = !resolved;
     this.uuid                   = details.uuid;
     this.username               = details.username;
     this.e164                   = details.e164;
@@ -365,6 +353,7 @@ public class Recipient {
     this.profileAvatar          = details.profileAvatar;
     this.hasProfileImage        = details.hasProfileImage;
     this.profileSharing         = details.profileSharing;
+    this.lastProfileFetch       = details.lastProfileFetch;
     this.notificationChannel    = details.notificationChannel;
     this.unidentifiedAccessMode = details.unidentifiedAccessMode;
     this.forceSmsSelection      = details.forceSmsSelection;
@@ -373,6 +362,7 @@ public class Recipient {
     this.storageId              = details.storageId;
     this.identityKey            = details.identityKey;
     this.identityStatus         = details.identityStatus;
+    this.mentionSetting         = details.mentionSetting;
   }
 
   public @NonNull RecipientId getId() {
@@ -392,37 +382,54 @@ public class Recipient {
       List<String> names = new LinkedList<>();
 
       for (Recipient recipient : participants) {
-        names.add(recipient.toShortString(context));
+        names.add(recipient.getDisplayName(context));
       }
 
       return Util.join(names, ", ");
+    } else if (name == null && groupId != null && groupId.isPush()) {
+      return context.getString(R.string.RecipientProvider_unnamed_group);
+    } else {
+      return this.name;
     }
-
-    return this.name;
   }
 
   /**
-   * TODO [UUID] -- Remove once UUID Feature Flag is removed
+   * False iff it {@link #getDisplayName} would fall back to e164, email or unknown.
    */
-  @Deprecated
-  public @NonNull String toShortString(@NonNull Context context) {
-    if (FeatureFlags.profileDisplay()) return getDisplayName(context);
-    else                               return Optional.fromNullable(getName(context)).or(getSmsAddress()).or("");
+  public boolean hasAUserSetDisplayName(@NonNull Context context) {
+    return !TextUtils.isEmpty(getName(context))            ||
+           !TextUtils.isEmpty(getProfileName().toString()) ||
+           !TextUtils.isEmpty(getDisplayUsername());
   }
 
   public @NonNull String getDisplayName(@NonNull Context context) {
-    return Util.getFirstNonEmpty(getName(context),
-                                 getProfileName().toString(),
-                                 getDisplayUsername(),
-                                 e164,
-                                 email,
-                                 context.getString(R.string.Recipient_unknown));
+    String name = Util.getFirstNonEmpty(getName(context),
+                                        getProfileName().toString(),
+                                        getDisplayUsername(),
+                                        e164,
+                                        email,
+                                        context.getString(R.string.Recipient_unknown));
+
+    return StringUtil.isolateBidi(name);
+  }
+
+  public @NonNull String getMentionDisplayName(@NonNull Context context) {
+    String name = Util.getFirstNonEmpty(localNumber ? getProfileName().toString() : getName(context),
+                                        localNumber ? getName(context) : getProfileName().toString(),
+                                        getDisplayUsername(),
+                                        e164,
+                                        email,
+                                        context.getString(R.string.Recipient_unknown));
+
+    return StringUtil.isolateBidi(name);
   }
 
   public @NonNull String getShortDisplayName(@NonNull Context context) {
-    return Util.getFirstNonEmpty(getName(context),
-                                 getProfileName().getGivenName(),
-                                 getDisplayName(context));
+    String name = Util.getFirstNonEmpty(getName(context),
+                                        getProfileName().getGivenName(),
+                                        getDisplayName(context));
+
+    return StringUtil.isolateBidi(name);
   }
 
   public @NonNull MaterialColor getColor() {
@@ -430,10 +437,13 @@ public class Recipient {
       return MaterialColor.GROUP;
     } else if (color != null) {
       return color;
-     } else if (name != null) {
-      Log.i(TAG, "Saving color for " + id);
-      MaterialColor color = ContactColors.generateFor(name);
-      DatabaseFactory.getRecipientDatabase(ApplicationDependencies.getApplication()).setColor(id, color);
+     } else if (name != null || profileSharing) {
+      Log.w(TAG, "Had no color for " + id + "! Saving a new one.");
+
+      Context       context = ApplicationDependencies.getApplication();
+      MaterialColor color   = ContactColors.generateFor(getDisplayName(context));
+
+      SignalExecutors.BOUNDED.execute(() -> DatabaseFactory.getRecipientDatabase(context).setColorIfNotSet(id, color));
       return color;
     } else {
       return ContactColors.UNKNOWN_COLOR;
@@ -576,17 +586,16 @@ public class Recipient {
     return profileName;
   }
 
-  public @Nullable String getCustomLabel() {
-    if (FeatureFlags.profileDisplay()) throw new AssertionError("This method should never be called if PROFILE_DISPLAY is enabled.");
-    return customLabel;
-  }
-
   public @Nullable String getProfileAvatar() {
     return profileAvatar;
   }
 
   public boolean isProfileSharing() {
     return profileSharing;
+  }
+
+  public long getLastProfileFetchTime() {
+    return lastProfileFetch;
   }
 
   public boolean isGroup() {
@@ -617,6 +626,10 @@ public class Recipient {
     return groupId != null && groupId.isV2();
   }
 
+  public boolean isActiveGroup() {
+    return Stream.of(getParticipants()).anyMatch(Recipient::isLocalNumber);
+  }
+
   public @NonNull List<Recipient> getParticipants() {
     return new ArrayList<>(participants);
   }
@@ -643,7 +656,7 @@ public class Recipient {
 
   public @NonNull FallbackContactPhoto getFallbackContactPhoto(@NonNull FallbackPhotoProvider fallbackPhotoProvider) {
     if      (localNumber)              return fallbackPhotoProvider.getPhotoForLocalNumber();
-    if      (isResolving())            return fallbackPhotoProvider.getPhotoForResolvingRecipient();
+    else if (isResolving())            return fallbackPhotoProvider.getPhotoForResolvingRecipient();
     else if (isGroupInternal())        return fallbackPhotoProvider.getPhotoForGroup();
     else if (isGroup())                return fallbackPhotoProvider.getPhotoForGroup();
     else if (!TextUtils.isEmpty(name)) return fallbackPhotoProvider.getPhotoForRecipientWithName(name);
@@ -732,7 +745,7 @@ public class Recipient {
     if (FeatureFlags.usernames()) {
       return true;
     } else {
-      return FeatureFlags.uuids() && uuidCapability == Capability.SUPPORTED;
+      return uuidCapability == Capability.SUPPORTED;
     }
   }
 
@@ -803,12 +816,16 @@ public class Recipient {
     return ApplicationDependencies.getRecipientCache().getLive(id);
   }
 
-  private @Nullable String getDisplayUsername() {
+  public @Nullable String getDisplayUsername() {
     if (!TextUtils.isEmpty(username)) {
       return "@" + username;
     } else {
       return null;
     }
+  }
+
+  public @NonNull MentionSetting getMentionSetting() {
+    return mentionSetting;
   }
 
   @Override
@@ -876,8 +893,5 @@ public class Recipient {
   }
 
   private static class MissingAddressError extends AssertionError {
-  }
-
-  private static class UuidRecipientError extends AssertionError {
   }
 }

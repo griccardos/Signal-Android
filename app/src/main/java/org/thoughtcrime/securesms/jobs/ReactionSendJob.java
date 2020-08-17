@@ -67,7 +67,7 @@ public class ReactionSendJob extends BaseJob {
       throws NoSuchMessageException
   {
     MessageRecord message = isMms ? DatabaseFactory.getMmsDatabase(context).getMessageRecord(messageId)
-                                  : DatabaseFactory.getSmsDatabase(context).getMessage(messageId);
+                                  : DatabaseFactory.getSmsDatabase(context).getMessageRecord(messageId);
 
     Recipient conversationRecipient = DatabaseFactory.getThreadDatabase(context).getRecipientForThreadId(message.getThreadId());
 
@@ -140,7 +140,7 @@ public class ReactionSendJob extends BaseJob {
       message = DatabaseFactory.getMmsDatabase(context).getMessageRecord(messageId);
     } else {
       db      = DatabaseFactory.getSmsDatabase(context);
-      message = DatabaseFactory.getSmsDatabase(context).getMessage(messageId);
+      message = DatabaseFactory.getSmsDatabase(context).getMessageRecord(messageId);
     }
 
     Recipient targetAuthor        = message.isOutgoing() ? Recipient.self() : message.getIndividualRecipient();
@@ -209,7 +209,7 @@ public class ReactionSendJob extends BaseJob {
       throws IOException, UntrustedIdentityException
   {
     SignalServiceMessageSender             messageSender      = ApplicationDependencies.getSignalServiceMessageSender();
-    List<SignalServiceAddress>             addresses          = Stream.of(destinations).map(t -> RecipientUtil.toSignalServiceAddress(context, t)).toList();
+    List<SignalServiceAddress>             addresses          = RecipientUtil.toSignalServiceAddressesFromResolved(context, destinations);
     List<Optional<UnidentifiedAccessPair>> unidentifiedAccess = Stream.of(destinations).map(recipient -> UnidentifiedAccessUtil.getAccessFor(context, recipient)).toList();
     SignalServiceDataMessage.Builder       dataMessage        = SignalServiceDataMessage.newBuilder()
                                                                                         .withTimestamp(System.currentTimeMillis())
@@ -222,24 +222,7 @@ public class ReactionSendJob extends BaseJob {
 
     List<SendMessageResult> results = messageSender.sendMessage(addresses, unidentifiedAccess, false, dataMessage.build());
 
-    Stream.of(results)
-          .filter(r -> r.getIdentityFailure() != null)
-          .map(SendMessageResult::getAddress)
-          .map(a -> Recipient.externalPush(context, a))
-          .forEach(r -> Log.w(TAG, "Identity failure for " + r.getId()));
-
-    Stream.of(results)
-          .filter(SendMessageResult::isUnregisteredFailure)
-          .map(SendMessageResult::getAddress)
-          .map(a -> Recipient.externalPush(context, a))
-          .forEach(r -> Log.w(TAG, "Unregistered failure for " + r.getId()));
-
-
-    return Stream.of(results)
-                 .filter(r -> r.getSuccess() != null || r.getIdentityFailure() != null || r.isUnregisteredFailure())
-                 .map(SendMessageResult::getAddress)
-                 .map(a -> Recipient.externalPush(context, a))
-                 .toList();
+    return GroupSendJobHelper.getCompletedSends(context, results);
   }
 
   private static SignalServiceDataMessage.Reaction buildReaction(@NonNull Context context,
@@ -247,6 +230,7 @@ public class ReactionSendJob extends BaseJob {
                                                                  boolean remove,
                                                                  @NonNull Recipient targetAuthor,
                                                                  long targetSentTimestamp)
+      throws IOException
   {
     return new SignalServiceDataMessage.Reaction(reaction.getEmoji(),
                                                  remove,

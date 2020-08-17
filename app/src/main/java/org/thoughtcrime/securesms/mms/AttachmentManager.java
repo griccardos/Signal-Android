@@ -377,7 +377,7 @@ public class AttachmentManager {
                .execute();
   }
 
-  public static void selectGallery(Activity activity, int requestCode, @NonNull Recipient recipient, @NonNull String body, @NonNull TransportOption transport) {
+  public static void selectGallery(Activity activity, int requestCode, @NonNull Recipient recipient, @NonNull CharSequence body, @NonNull TransportOption transport) {
     Permissions.with(activity)
                .request(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                .ifNecessary()
@@ -522,7 +522,19 @@ public class AttachmentManager {
   }
 
   public enum MediaType {
-    IMAGE, GIF, AUDIO, VIDEO, DOCUMENT, VCARD;
+    IMAGE(MediaUtil.IMAGE_JPEG),
+    GIF(MediaUtil.IMAGE_GIF),
+    AUDIO(MediaUtil.AUDIO_AAC),
+    VIDEO(MediaUtil.VIDEO_MP4),
+    DOCUMENT(MediaUtil.UNKNOWN),
+    VCARD(MediaUtil.VCARD);
+
+    private final String fallbackMimeType;
+
+    MediaType(String fallbackMimeType) {
+      this.fallbackMimeType = fallbackMimeType;
+    }
+
 
     public @NonNull Slide createSlide(@NonNull  Context  context,
                                       @NonNull  Uri      uri,
@@ -559,5 +571,8 @@ public class AttachmentManager {
       return DOCUMENT;
     }
 
+    public String toFallbackMimeType() {
+      return fallbackMimeType;
+    }
   }
 }

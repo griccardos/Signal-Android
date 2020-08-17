@@ -9,6 +9,7 @@ import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.DefaultValueLiveData;
 
 import java.util.Collection;
+import java.util.Objects;
 
 public abstract class GroupMemberEntry {
 
@@ -35,8 +36,7 @@ public abstract class GroupMemberEntry {
 
   public final static class NewGroupCandidate extends GroupMemberEntry {
 
-    private final DefaultValueLiveData<Boolean> isSelected = new DefaultValueLiveData<>(false);
-    private final Recipient                     member;
+    private final Recipient member;
 
     public NewGroupCandidate(@NonNull Recipient member) {
       this.member = member;
@@ -44,14 +44,6 @@ public abstract class GroupMemberEntry {
 
     public @NonNull Recipient getMember() {
       return member;
-    }
-
-    public @NonNull LiveData<Boolean> isSelected() {
-      return isSelected;
-    }
-
-    public void setSelected(boolean isSelected) {
-      this.isSelected.postValue(isSelected);
     }
 
     @Override
@@ -120,10 +112,17 @@ public abstract class GroupMemberEntry {
     private final UuidCiphertext inviteeCipherText;
     private final boolean        cancellable;
 
-    public PendingMember(@NonNull Recipient invitee, @NonNull UuidCiphertext inviteeCipherText, boolean cancellable) {
+    public PendingMember(@NonNull Recipient invitee, @Nullable UuidCiphertext inviteeCipherText, boolean cancellable) {
       this.invitee           = invitee;
       this.inviteeCipherText = inviteeCipherText;
       this.cancellable       = cancellable;
+      if (cancellable && inviteeCipherText == null) {
+        throw new IllegalArgumentException("inviteeCipherText must be supplied to enable cancellation");
+      }
+    }
+
+    public PendingMember(@NonNull Recipient invitee) {
+      this(invitee, null, false);
     }
 
     public Recipient getInvitee() {
@@ -131,6 +130,9 @@ public abstract class GroupMemberEntry {
     }
 
     public UuidCiphertext getInviteeCipherText() {
+      if (!cancellable) {
+        throw new UnsupportedOperationException();
+      }
       return inviteeCipherText;
     }
 
@@ -151,7 +153,7 @@ public abstract class GroupMemberEntry {
 
       PendingMember other = (PendingMember) obj;
       return other.invitee.equals(invitee) &&
-             other.inviteeCipherText.equals(inviteeCipherText) &&
+             Objects.equals(other.inviteeCipherText, inviteeCipherText) &&
              other.cancellable == cancellable;
     }
 
@@ -159,7 +161,7 @@ public abstract class GroupMemberEntry {
     public int hashCode() {
       int hash = invitee.hashCode();
       hash *= 31;
-      hash += inviteeCipherText.hashCode();
+      hash += Objects.hashCode(inviteeCipherText);
       hash *= 31;
       return hash + (cancellable ? 1 : 0);
     }

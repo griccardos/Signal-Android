@@ -37,6 +37,7 @@ import org.thoughtcrime.securesms.database.helpers.SQLCipherOpenHelper;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.ReactionRecord;
 import org.thoughtcrime.securesms.database.model.SmsMessageRecord;
+import org.thoughtcrime.securesms.database.model.databaseprotos.ProfileChangeDetails;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobs.TrimThreadJob;
 import org.thoughtcrime.securesms.logging.Log;
@@ -45,12 +46,15 @@ import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.thoughtcrime.securesms.sms.IncomingGroupUpdateMessage;
 import org.thoughtcrime.securesms.sms.IncomingTextMessage;
 import org.thoughtcrime.securesms.sms.OutgoingTextMessage;
+import org.thoughtcrime.securesms.util.Base64;
 import org.thoughtcrime.securesms.util.JsonUtils;
+import org.thoughtcrime.securesms.util.SqlUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.io.IOException;
 import java.security.SecureRandom;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -148,6 +152,11 @@ public class SmsDatabase extends MessagingDatabase {
   }
 
   @Override
+  protected String getDateReceivedColumnName() {
+    return DATE_RECEIVED;
+  }
+
+  @Override
   protected String getTypeField() {
     return TYPE;
   }
@@ -216,6 +225,26 @@ public class SmsDatabase extends MessagingDatabase {
       if (cursor != null)
         cursor.close();
     }
+  }
+
+  public int getMessageCountForThreadSummary(long threadId) {
+    SQLiteDatabase db = databaseHelper.getReadableDatabase();
+
+    String[] cols  = { "COUNT(*)" };
+    String   query = THREAD_ID + " = ? AND (NOT " + TYPE + " & ? AND TYPE != ?)";
+    long     type  = Types.END_SESSION_BIT | Types.KEY_EXCHANGE_IDENTITY_UPDATE_BIT | Types.KEY_EXCHANGE_IDENTITY_VERIFIED_BIT;
+    String[] args  = SqlUtil.buildArgs(threadId, type, Types.PROFILE_CHANGE_TYPE);
+
+    try (Cursor cursor = db.query(TABLE_NAME, cols, query, args, null, null, null)) {
+      if (cursor != null && cursor.moveToFirst()) {
+        int count = cursor.getInt(0);
+        if (count > 0) {
+          return getMessageCountForThread(threadId);
+        }
+      }
+    }
+
+    return 0;
   }
 
   public int getMessageCountForThread(long threadId) {
@@ -355,13 +384,33 @@ public class SmsDatabase extends MessagingDatabase {
 
   @Override
   public void markExpireStarted(long id, long startedAtTimestamp) {
-    ContentValues contentValues = new ContentValues();
-    contentValues.put(EXPIRE_STARTED, startedAtTimestamp);
+    markExpireStarted(Collections.singleton(id), startedAtTimestamp);
+  }
 
-    SQLiteDatabase db = databaseHelper.getWritableDatabase();
-    db.update(TABLE_NAME, contentValues, ID_WHERE, new String[] {String.valueOf(id)});
+  @Override
+  public void markExpireStarted(Collection<Long> ids, long startedAtTimestamp) {
+    SQLiteDatabase db       = databaseHelper.getWritableDatabase();
+    long           threadId = -1;
 
-    long threadId = getThreadIdForMessage(id);
+    db.beginTransaction();
+    try {
+      String query = ID + " = ? AND (" + EXPIRE_STARTED + " = 0 OR " + EXPIRE_STARTED + " > ?)";
+
+      for (long id : ids) {
+        ContentValues contentValues = new ContentValues();
+        contentValues.put(EXPIRE_STARTED, startedAtTimestamp);
+
+        db.update(TABLE_NAME, contentValues, query, new String[]{String.valueOf(id), String.valueOf(startedAtTimestamp)});
+
+        if (threadId < 0) {
+          threadId = getThreadIdForMessage(id);
+        }
+      }
+
+      db.setTransactionSuccessful();
+    } finally {
+      db.endTransaction();
+    }
 
     DatabaseFactory.getThreadDatabase(context).update(threadId, false);
     notifyConversationListeners(threadId);
@@ -395,19 +444,18 @@ public class SmsDatabase extends MessagingDatabase {
 
   public boolean incrementReceiptCount(SyncMessageId messageId, boolean deliveryReceipt) {
     SQLiteDatabase database     = databaseHelper.getWritableDatabase();
-    Cursor         cursor       = null;
     boolean        foundMessage = false;
 
-    try {
-      cursor = database.query(TABLE_NAME, new String[] {ID, THREAD_ID, RECIPIENT_ID, TYPE},
+    try (Cursor cursor = database.query(TABLE_NAME, new String[] {ID, THREAD_ID, RECIPIENT_ID, TYPE, DELIVERY_RECEIPT_COUNT, READ_RECEIPT_COUNT},
                               DATE_SENT + " = ?", new String[] {String.valueOf(messageId.getTimetamp())},
-                              null, null, null, null);
+                              null, null, null, null)) {
 
       while (cursor.moveToNext()) {
         if (Types.isOutgoingMessageType(cursor.getLong(cursor.getColumnIndexOrThrow(TYPE)))) {
           RecipientId theirRecipientId = messageId.getRecipientId();
           RecipientId outRecipientId   = RecipientId.from(cursor.getLong(cursor.getColumnIndexOrThrow(RECIPIENT_ID)));
           String      columnName       = deliveryReceipt ? DELIVERY_RECEIPT_COUNT : READ_RECEIPT_COUNT;
+          boolean     isFirstIncrement = cursor.getLong(cursor.getColumnIndexOrThrow(columnName)) == 0;
 
           if (outRecipientId.equals(theirRecipientId)) {
             long threadId = cursor.getLong(cursor.getColumnIndexOrThrow(THREAD_ID));
@@ -418,7 +466,13 @@ public class SmsDatabase extends MessagingDatabase {
                              new String[] {String.valueOf(cursor.getLong(cursor.getColumnIndexOrThrow(ID)))});
 
             DatabaseFactory.getThreadDatabase(context).update(threadId, false);
-            notifyConversationListeners(threadId);
+
+            if (isFirstIncrement) {
+              notifyConversationListeners(threadId);
+            } else {
+              notifyVerboseConversationListeners(threadId);
+            }
+
             foundMessage = true;
           }
         }
@@ -430,9 +484,6 @@ public class SmsDatabase extends MessagingDatabase {
       }
 
       return foundMessage;
-    } finally {
-      if (cursor != null)
-        cursor.close();
     }
   }
 
@@ -484,8 +535,12 @@ public class SmsDatabase extends MessagingDatabase {
     return setMessagesRead(THREAD_ID + " = ?", new String[] {String.valueOf(threadId)});
   }
 
-  public List<MarkedMessageInfo> setMessagesRead(long threadId) {
-    return setMessagesRead(THREAD_ID + " = ? AND " + READ + " = 0", new String[] {String.valueOf(threadId)});
+  public List<MarkedMessageInfo> setMessagesReadSince(long threadId, long sinceTimestamp) {
+    if (sinceTimestamp == -1) {
+      return setMessagesRead(THREAD_ID + " = ? AND " + READ + " = 0", new String[] {String.valueOf(threadId)});
+    } else {
+      return setMessagesRead(THREAD_ID + " = ? AND " + READ + " = 0 AND " + DATE_RECEIVED + " <= ?", new String[] {String.valueOf(threadId),String.valueOf(sinceTimestamp)});
+    }
   }
 
   public List<MarkedMessageInfo> setAllMessagesRead() {
@@ -598,14 +653,64 @@ public class SmsDatabase extends MessagingDatabase {
     long messageId    = db.insert(TABLE_NAME, null, values);
 
     DatabaseFactory.getThreadDatabase(context).update(threadId, true);
-    notifyConversationListeners(threadId);
-    ApplicationDependencies.getJobManager().add(new TrimThreadJob(threadId));
-
     if (unread) {
       DatabaseFactory.getThreadDatabase(context).incrementUnread(threadId, 1);
     }
 
+    notifyConversationListeners(threadId);
+    ApplicationDependencies.getJobManager().add(new TrimThreadJob(threadId));
+
     return new Pair<>(messageId, threadId);
+  }
+
+  public void insertProfileNameChangeMessages(@NonNull Recipient recipient, @NonNull String newProfileName, @NonNull String previousProfileName) {
+    ThreadDatabase                  threadDatabase    = DatabaseFactory.getThreadDatabase(context);
+    List<GroupDatabase.GroupRecord> groupRecords      = DatabaseFactory.getGroupDatabase(context).getGroupsContainingMember(recipient.getId(), false);
+    List<Long>                      threadIdsToUpdate = new LinkedList<>();
+
+    byte[] profileChangeDetails = ProfileChangeDetails.newBuilder()
+                                                      .setProfileNameChange(ProfileChangeDetails.StringChange.newBuilder()
+                                                                                                             .setNew(newProfileName)
+                                                                                                             .setPrevious(previousProfileName))
+                                                      .build()
+                                                      .toByteArray();
+
+    String body = Base64.encodeBytes(profileChangeDetails);
+
+    SQLiteDatabase db = databaseHelper.getWritableDatabase();
+    db.beginTransaction();
+
+    try {
+      threadIdsToUpdate.add(threadDatabase.getThreadIdFor(recipient.getId()));
+      for (GroupDatabase.GroupRecord groupRecord : groupRecords) {
+        if (groupRecord.isActive()) {
+          threadIdsToUpdate.add(threadDatabase.getThreadIdFor(groupRecord.getRecipientId()));
+        }
+      }
+
+      Stream.of(threadIdsToUpdate)
+            .withoutNulls()
+            .forEach(threadId -> {
+              ContentValues values = new ContentValues();
+              values.put(RECIPIENT_ID, recipient.getId().serialize());
+              values.put(ADDRESS_DEVICE_ID, 1);
+              values.put(DATE_RECEIVED, System.currentTimeMillis());
+              values.put(DATE_SENT, System.currentTimeMillis());
+              values.put(READ, 1);
+              values.put(TYPE, Types.PROFILE_CHANGE_TYPE);
+              values.put(THREAD_ID, threadId);
+              values.put(BODY, body);
+
+              db.insert(TABLE_NAME, null, values);
+
+              notifyConversationListeners(threadId);
+              ApplicationDependencies.getJobManager().add(new TrimThreadJob(threadId));
+            });
+
+      db.setTransactionSuccessful();
+    } finally {
+      db.endTransaction();
+    }
   }
 
   protected Optional<InsertResult> insertMessageInbox(IncomingTextMessage message, long type) {
@@ -778,7 +883,8 @@ public class SmsDatabase extends MessagingDatabase {
     return db.query(TABLE_NAME, MESSAGE_PROJECTION, where, null, null, null, null);
   }
 
-  public SmsMessageRecord getMessage(long messageId) throws NoSuchMessageException {
+  @Override
+  public SmsMessageRecord getMessageRecord(long messageId) throws NoSuchMessageException {
     SQLiteDatabase db     = databaseHelper.getReadableDatabase();
     Cursor         cursor = db.query(TABLE_NAME, MESSAGE_PROJECTION, ID_WHERE, new String[]{messageId + ""}, null, null, null);
     Reader         reader = new Reader(cursor);
@@ -791,9 +897,20 @@ public class SmsDatabase extends MessagingDatabase {
   }
 
   public Cursor getMessageCursor(long messageId) {
+    Cursor cursor = internalGetMessageCursor(messageId);
+    setNotifyConversationListeners(cursor, getThreadIdForMessage(messageId));
+    return cursor;
+  }
+
+  public Cursor getVerboseMessageCursor(long messageId) {
+    Cursor cursor = internalGetMessageCursor(messageId);
+    setNotifyVerboseConversationListeners(cursor, getThreadIdForMessage(messageId));
+    return cursor;
+  }
+
+  private Cursor internalGetMessageCursor(long messageId) {
     SQLiteDatabase db = databaseHelper.getReadableDatabase();
     Cursor cursor = db.query(TABLE_NAME, MESSAGE_PROJECTION, ID_WHERE, new String[] {messageId + ""}, null, null, null);
-    setNotifyConverationListeners(cursor, getThreadIdForMessage(messageId));
     return cursor;
   }
 
@@ -802,7 +919,7 @@ public class SmsDatabase extends MessagingDatabase {
     SQLiteDatabase db = databaseHelper.getWritableDatabase();
     long threadId     = getThreadIdForMessage(messageId);
     db.delete(TABLE_NAME, ID_WHERE, new String[] {messageId+""});
-    boolean threadDeleted = DatabaseFactory.getThreadDatabase(context).update(threadId, false);
+    boolean threadDeleted = DatabaseFactory.getThreadDatabase(context).update(threadId, false, true);
     notifyConversationListeners(threadId);
     return threadDeleted;
   }

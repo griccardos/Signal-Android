@@ -13,31 +13,42 @@ import java.util.List;
  */
 final class GlobalGroupState {
 
-  @Nullable private final DecryptedGroup      localState;
-  @NonNull  private final List<GroupLogEntry> history;
+  @Nullable private final DecryptedGroup            localState;
+  @NonNull  private final List<ServerGroupLogEntry> serverHistory;
 
   GlobalGroupState(@Nullable DecryptedGroup localState,
-                   @NonNull List<GroupLogEntry> serverStates)
+                   @NonNull List<ServerGroupLogEntry> serverHistory)
   {
-    this.localState = localState;
-    this.history    = serverStates;
+    this.localState    = localState;
+    this.serverHistory = serverHistory;
   }
 
   @Nullable DecryptedGroup getLocalState() {
     return localState;
   }
 
-  @NonNull Collection<GroupLogEntry> getHistory() {
-    return history;
+  @NonNull Collection<ServerGroupLogEntry> getServerHistory() {
+    return serverHistory;
   }
 
-  int getLatestVersionNumber() {
-    if (history.isEmpty()) {
+  int getEarliestRevisionNumber() {
+    if (localState != null) {
+      return localState.getRevision();
+    } else {
+      if (serverHistory.isEmpty()) {
+        throw new AssertionError();
+      }
+      return serverHistory.get(0).getRevision();
+    }
+  }
+
+  int getLatestRevisionNumber() {
+    if (serverHistory.isEmpty()) {
       if (localState == null) {
         throw new AssertionError();
       }
-      return localState.getVersion();
+      return localState.getRevision();
     }
-    return history.get(history.size() - 1).getGroup().getVersion();
+    return serverHistory.get(serverHistory.size() - 1).getRevision();
   }
 }

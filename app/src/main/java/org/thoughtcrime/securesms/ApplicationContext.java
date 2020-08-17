@@ -45,13 +45,13 @@ import org.thoughtcrime.securesms.jobs.FcmRefreshJob;
 import org.thoughtcrime.securesms.jobs.MultiDeviceContactUpdateJob;
 import org.thoughtcrime.securesms.jobs.PushNotificationReceiveJob;
 import org.thoughtcrime.securesms.jobs.RefreshPreKeysJob;
+import org.thoughtcrime.securesms.jobs.RetrieveProfileJob;
 import org.thoughtcrime.securesms.logging.AndroidLogger;
 import org.thoughtcrime.securesms.logging.CustomSignalProtocolLogger;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.logging.PersistentLogger;
 import org.thoughtcrime.securesms.logging.SignalUncaughtExceptionHandler;
 import org.thoughtcrime.securesms.migrations.ApplicationMigrations;
-import org.thoughtcrime.securesms.notifications.MessageNotifier;
 import org.thoughtcrime.securesms.notifications.NotificationChannels;
 import org.thoughtcrime.securesms.providers.BlobProvider;
 import org.thoughtcrime.securesms.push.SignalServiceNetworkAccess;
@@ -60,7 +60,6 @@ import org.thoughtcrime.securesms.revealable.ViewOnceMessageManager;
 import org.thoughtcrime.securesms.ringrtc.RingRtcLogger;
 import org.thoughtcrime.securesms.service.DirectoryRefreshListener;
 import org.thoughtcrime.securesms.service.ExpiringMessageManager;
-import org.thoughtcrime.securesms.service.IncomingMessageObserver;
 import org.thoughtcrime.securesms.service.KeyCachingService;
 import org.thoughtcrime.securesms.service.LocalBackupListener;
 import org.thoughtcrime.securesms.service.RotateSenderCertificateListener;
@@ -96,7 +95,6 @@ public class ApplicationContext extends MultiDexApplication implements DefaultLi
   private ViewOnceMessageManager   viewOnceMessageManager;
   private TypingStatusRepository   typingStatusRepository;
   private TypingStatusSender       typingStatusSender;
-  private IncomingMessageObserver  incomingMessageObserver;
   private PersistentLogger         persistentLogger;
 
   private volatile boolean isAppVisible;
@@ -107,10 +105,11 @@ public class ApplicationContext extends MultiDexApplication implements DefaultLi
 
   @Override
   public void onCreate() {
+    long startTime = System.currentTimeMillis();
     super.onCreate();
-    Log.i(TAG, "onCreate()");
     initializeSecurityProvider();
     initializeLogging();
+    Log.i(TAG, "onCreate()");
     initializeCrashHandling();
     initializeAppDependencies();
     initializeFirstEverAppLaunch();
@@ -133,7 +132,8 @@ public class ApplicationContext extends MultiDexApplication implements DefaultLi
     NotificationChannels.create(this);
     RefreshPreKeysJob.scheduleIfNecessary();
     StorageSyncHelper.scheduleRoutineSync();
-    RegistrationUtil.markRegistrationPossiblyComplete();
+    RetrieveProfileJob.enqueueRoutineFetchIfNecessary(this);
+    RegistrationUtil.maybeMarkRegistrationComplete(this);
     ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
 
     if (Build.VERSION.SDK_INT < 21) {
@@ -141,6 +141,7 @@ public class ApplicationContext extends MultiDexApplication implements DefaultLi
     }
 
     ApplicationDependencies.getJobManager().beginJobLoop();
+    Log.d(TAG, "onCreate() took " + (System.currentTimeMillis() - startTime) + " ms");
   }
 
   @Override
@@ -160,7 +161,7 @@ public class ApplicationContext extends MultiDexApplication implements DefaultLi
     isAppVisible = false;
     Log.i(TAG, "App is no longer visible.");
     KeyCachingService.onAppBackgrounded(this);
-    MessageNotifier.setVisibleThread(-1);
+    ApplicationDependencies.getMessageNotifier().clearVisibleThread();
     ApplicationDependencies.getFrameRateTracker().end();
   }
 
@@ -229,7 +230,7 @@ public class ApplicationContext extends MultiDexApplication implements DefaultLi
   }
 
   public void initializeMessageRetrieval() {
-    this.incomingMessageObserver = new IncomingMessageObserver(this);
+    ApplicationDependencies.getIncomingMessageObserver();
   }
 
   private void initializeAppDependencies() {

@@ -2,13 +2,16 @@ package org.thoughtcrime.securesms.recipients;
 
 import android.content.Context;
 import android.net.Uri;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.thoughtcrime.securesms.color.MaterialColor;
 import org.thoughtcrime.securesms.database.IdentityDatabase.VerifiedStatus;
+import org.thoughtcrime.securesms.database.RecipientDatabase;
 import org.thoughtcrime.securesms.database.RecipientDatabase.InsightsBannerTier;
+import org.thoughtcrime.securesms.database.RecipientDatabase.MentionSetting;
 import org.thoughtcrime.securesms.database.RecipientDatabase.RecipientSettings;
 import org.thoughtcrime.securesms.database.RecipientDatabase.RegisteredState;
 import org.thoughtcrime.securesms.database.RecipientDatabase.UnidentifiedAccessMode;
@@ -53,6 +56,7 @@ public class RecipientDetails {
   final String                 profileAvatar;
   final boolean                hasProfileImage;
   final boolean                profileSharing;
+  final long                   lastProfileFetch;
   final boolean                systemContact;
   final boolean                isLocalNumber;
   final String                 notificationChannel;
@@ -64,14 +68,14 @@ public class RecipientDetails {
   final byte[] storageId;
   final byte[]                 identityKey;
   final VerifiedStatus         identityStatus;
+  final MentionSetting         mentionSetting;
 
-  RecipientDetails(@NonNull Context context,
-                   @Nullable String name,
-                   @NonNull Optional<Long> groupAvatarId,
-                   boolean systemContact,
-                   boolean isLocalNumber,
-                   @NonNull RecipientSettings settings,
-                   @Nullable List<Recipient> participants)
+  public RecipientDetails(@Nullable String name,
+                          @NonNull Optional<Long> groupAvatarId,
+                          boolean systemContact,
+                          boolean isLocalNumber,
+                          @NonNull RecipientSettings settings,
+                          @Nullable List<Recipient> participants)
   {
     this.groupAvatarId                   = groupAvatarId;
     this.systemContactPhoto              = Util.uri(settings.getSystemContactPhotoUri());
@@ -99,6 +103,7 @@ public class RecipientDetails {
     this.profileAvatar                   = settings.getProfileAvatar();
     this.hasProfileImage                 = settings.hasProfileImage();
     this.profileSharing                  = settings.isProfileSharing();
+    this.lastProfileFetch                = settings.getLastProfileFetch();
     this.systemContact                   = systemContact;
     this.isLocalNumber                   = isLocalNumber;
     this.notificationChannel             = settings.getNotificationChannel();
@@ -110,6 +115,7 @@ public class RecipientDetails {
     this.storageId                       = settings.getStorageId();
     this.identityKey                     = settings.getIdentityKey();
     this.identityStatus                  = settings.getIdentityStatus();
+    this.mentionSetting                  = settings.getMentionSetting();
 
     if (name == null) this.name = settings.getSystemDisplayName();
     else              this.name = name;
@@ -146,6 +152,7 @@ public class RecipientDetails {
     this.profileAvatar          = null;
     this.hasProfileImage        = false;
     this.profileSharing         = false;
+    this.lastProfileFetch       = 0;
     this.systemContact          = true;
     this.isLocalNumber          = false;
     this.notificationChannel    = null;
@@ -157,5 +164,14 @@ public class RecipientDetails {
     this.storageId              = null;
     this.identityKey            = null;
     this.identityStatus         = VerifiedStatus.DEFAULT;
+    this.mentionSetting         = MentionSetting.ALWAYS_NOTIFY;
+  }
+
+  public static @NonNull RecipientDetails forIndividual(@NonNull Context context, @NonNull RecipientSettings settings) {
+    boolean systemContact = !TextUtils.isEmpty(settings.getSystemDisplayName());
+    boolean isLocalNumber = (settings.getE164() != null && settings.getE164().equals(TextSecurePreferences.getLocalNumber(context))) ||
+                            (settings.getUuid() != null && settings.getUuid().equals(TextSecurePreferences.getLocalUuid(context)));
+
+    return new RecipientDetails(null, Optional.absent(), systemContact, isLocalNumber, settings, null);
   }
 }

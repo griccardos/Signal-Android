@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.preference.PreferenceManager;
+
+import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 
 import com.annimon.stream.Stream;
@@ -13,6 +15,7 @@ import com.fasterxml.jackson.databind.type.TypeFactory;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.util.JsonUtils;
+import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -22,20 +25,21 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 public class RecentEmojiPageModel implements EmojiPageModel {
-  private static final String TAG                  = RecentEmojiPageModel.class.getSimpleName();
-  private static final String EMOJI_LRU_PREFERENCE = "pref_recent_emoji2";
-  private static final int    EMOJI_LRU_SIZE       = 50;
+  private static final String TAG            = RecentEmojiPageModel.class.getSimpleName();
+  private static final int    EMOJI_LRU_SIZE = 50;
 
   private final SharedPreferences     prefs;
+  private final String                preferenceName;
   private final LinkedHashSet<String> recentlyUsed;
 
-  public RecentEmojiPageModel(Context context) {
-    this.prefs        = PreferenceManager.getDefaultSharedPreferences(context);
-    this.recentlyUsed = getPersistedCache();
+  public RecentEmojiPageModel(Context context, @NonNull String preferenceName) {
+    this.prefs          = PreferenceManager.getDefaultSharedPreferences(context);
+    this.preferenceName = preferenceName;
+    this.recentlyUsed   = getPersistedCache();
   }
 
   private LinkedHashSet<String> getPersistedCache() {
-    String serialized = prefs.getString(EMOJI_LRU_PREFERENCE, "[]");
+    String serialized = prefs.getString(preferenceName, "[]");
     try {
       CollectionType collectionType = TypeFactory.defaultInstance()
                                                  .constructCollectionType(LinkedHashSet.class, String.class);
@@ -72,6 +76,7 @@ public class RecentEmojiPageModel implements EmojiPageModel {
     return true;
   }
 
+  @MainThread
   public void onCodePointSelected(String emoji) {
     recentlyUsed.remove(emoji);
     recentlyUsed.add(emoji);
@@ -83,22 +88,16 @@ public class RecentEmojiPageModel implements EmojiPageModel {
     }
 
     final LinkedHashSet<String> latestRecentlyUsed = new LinkedHashSet<>(recentlyUsed);
-    new AsyncTask<Void, Void, Void>() {
-
-      @Override
-      protected Void doInBackground(Void... params) {
-        try {
-          String serialized = JsonUtils.toJson(latestRecentlyUsed);
-          prefs.edit()
-               .putString(EMOJI_LRU_PREFERENCE, serialized)
-               .apply();
-        } catch (IOException e) {
-          Log.w(TAG, e);
-        }
-
-        return null;
+    SignalExecutors.BOUNDED.execute(() -> {
+      try {
+        String serialized = JsonUtils.toJson(latestRecentlyUsed);
+        prefs.edit()
+             .putString(preferenceName, serialized)
+             .apply();
+      } catch (IOException e) {
+        Log.w(TAG, e);
       }
-    }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    });
   }
 
   private String[] toReversePrimitiveArray(@NonNull LinkedHashSet<String> emojiSet) {

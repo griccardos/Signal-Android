@@ -2,6 +2,7 @@ package org.thoughtcrime.securesms.groups;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.lifecycle.LiveData;
@@ -27,14 +28,19 @@ import java.util.List;
 
 public final class LiveGroup {
 
-  private static final Comparator<GroupMemberEntry.FullMember>         LOCAL_FIRST  = (m1, m2) -> Boolean.compare(m2.getMember().isLocalNumber(), m1.getMember().isLocalNumber());
-  private static final Comparator<GroupMemberEntry.FullMember>         ADMIN_FIRST  = (m1, m2) -> Boolean.compare(m2.isAdmin(), m1.isAdmin());
-  private static final Comparator<? super GroupMemberEntry.FullMember> MEMBER_ORDER = ComparatorCompat.chain(LOCAL_FIRST)
-                                                                                                      .thenComparing(ADMIN_FIRST);
+  private static final Comparator<GroupMemberEntry.FullMember>         LOCAL_FIRST       = (m1, m2) -> Boolean.compare(m2.getMember().isLocalNumber(), m1.getMember().isLocalNumber());
+  private static final Comparator<GroupMemberEntry.FullMember>         ADMIN_FIRST       = (m1, m2) -> Boolean.compare(m2.isAdmin(), m1.isAdmin());
+  private static final Comparator<GroupMemberEntry.FullMember>         HAS_DISPLAY_NAME  = (m1, m2) -> Boolean.compare(m2.getMember().hasAUserSetDisplayName(ApplicationDependencies.getApplication()), m1.getMember().hasAUserSetDisplayName(ApplicationDependencies.getApplication()));
+  private static final Comparator<GroupMemberEntry.FullMember>         ALPHABETICAL      = (m1, m2) -> m1.getMember().getDisplayName(ApplicationDependencies.getApplication()).compareToIgnoreCase(m2.getMember().getDisplayName(ApplicationDependencies.getApplication()));
+  private static final Comparator<? super GroupMemberEntry.FullMember> MEMBER_ORDER      = ComparatorCompat.chain(LOCAL_FIRST)
+                                                                                                           .thenComparing(ADMIN_FIRST)
+                                                                                                           .thenComparing(HAS_DISPLAY_NAME)
+                                                                                                           .thenComparing(ALPHABETICAL);
 
-  private final GroupDatabase                       groupDatabase;
-  private final LiveData<Recipient>                 recipient;
-  private final LiveData<GroupDatabase.GroupRecord> groupRecord;
+  private final GroupDatabase                               groupDatabase;
+  private final LiveData<Recipient>                         recipient;
+  private final LiveData<GroupDatabase.GroupRecord>         groupRecord;
+  private final LiveData<List<GroupMemberEntry.FullMember>> fullMembers;
 
   public LiveGroup(@NonNull GroupId groupId) {
     Context                        context       = ApplicationDependencies.getApplication();
@@ -42,13 +48,27 @@ public final class LiveGroup {
 
     this.groupDatabase = DatabaseFactory.getGroupDatabase(context);
     this.recipient     = Transformations.switchMap(liveRecipient, LiveRecipient::getLiveData);
-    this.groupRecord   = LiveDataUtil.filterNotNull(LiveDataUtil.mapAsync(recipient, groupRecipient-> groupDatabase.getGroup(groupRecipient.getId()).orNull()));
+    this.groupRecord   = LiveDataUtil.filterNotNull(LiveDataUtil.mapAsync(recipient, groupRecipient -> groupDatabase.getGroup(groupRecipient.getId()).orNull()));
+    this.fullMembers   = LiveDataUtil.mapAsync(groupRecord,
+                                               g -> Stream.of(g.getMembers())
+                                                          .map(m -> {
+                                                            Recipient recipient = Recipient.resolved(m);
+                                                            return new GroupMemberEntry.FullMember(recipient, g.isAdmin(recipient));
+                                                          })
+                                                          .sorted(MEMBER_ORDER)
+                                                          .toList());
 
     SignalExecutors.BOUNDED.execute(() -> liveRecipient.postValue(Recipient.externalGroup(context, groupId).live()));
   }
 
   public LiveData<String> getTitle() {
-    return Transformations.map(groupRecord, GroupDatabase.GroupRecord::getTitle);
+    return LiveDataUtil.combineLatest(groupRecord, recipient, (groupRecord, recipient) -> {
+      String title = groupRecord.getTitle();
+      if (!TextUtils.isEmpty(title)) {
+        return title;
+      }
+      return recipient.getDisplayName(ApplicationDependencies.getApplication());
+    });
   }
 
   public LiveData<Recipient> getGroupRecipient() {
@@ -57,6 +77,10 @@ public final class LiveGroup {
 
   public LiveData<Boolean> isSelfAdmin() {
     return Transformations.map(groupRecord, g -> g.isAdmin(Recipient.self()));
+  }
+
+  public LiveData<Boolean> isActive() {
+    return Transformations.map(groupRecord, GroupDatabase.GroupRecord::isActive);
   }
 
   public LiveData<Boolean> getRecipientIsAdmin(@NonNull RecipientId recipientId) {
@@ -75,15 +99,15 @@ public final class LiveGroup {
     return Transformations.map(groupRecord, GroupDatabase.GroupRecord::getAttributesAccessControl);
   }
 
+  public LiveData<List<GroupMemberEntry.FullMember>> getNonAdminFullMembers() {
+    return Transformations.map(fullMembers,
+                               members -> Stream.of(members)
+                                                .filterNot(GroupMemberEntry.FullMember::isAdmin)
+                                                .toList());
+  }
+
   public LiveData<List<GroupMemberEntry.FullMember>> getFullMembers() {
-    return LiveDataUtil.mapAsync(groupRecord,
-                                 g -> Stream.of(g.getMembers())
-                                            .map(m -> {
-                                              Recipient recipient = Recipient.resolved(m);
-                                              return new GroupMemberEntry.FullMember(recipient, g.isAdmin(recipient));
-                                            })
-                                            .sorted(MEMBER_ORDER)
-                                            .toList());
+    return fullMembers;
   }
 
   public LiveData<Integer> getExpireMessages() {
@@ -91,11 +115,11 @@ public final class LiveGroup {
   }
 
   public LiveData<Boolean> selfCanEditGroupAttributes() {
-    return LiveDataUtil.combineLatest(isSelfAdmin(), getAttributesAccessControl(), this::applyAccessControl);
+    return LiveDataUtil.combineLatest(selfMemberLevel(), getAttributesAccessControl(), LiveGroup::applyAccessControl);
   }
 
   public LiveData<Boolean> selfCanAddMembers() {
-    return LiveDataUtil.combineLatest(isSelfAdmin(), getMembershipAdditionAccessControl(), this::applyAccessControl);
+    return LiveDataUtil.combineLatest(selfMemberLevel(), getMembershipAdditionAccessControl(), LiveGroup::applyAccessControl);
   }
 
   /**
@@ -121,10 +145,14 @@ public final class LiveGroup {
                                                           fullMemberCount);
   }
 
-  private boolean applyAccessControl(boolean isAdmin, @NonNull GroupAccessControl rights) {
+  private LiveData<GroupDatabase.MemberLevel> selfMemberLevel() {
+    return Transformations.map(groupRecord, g -> g.memberLevel(Recipient.self()));
+  }
+
+  private static boolean applyAccessControl(@NonNull GroupDatabase.MemberLevel memberLevel, @NonNull GroupAccessControl rights) {
     switch (rights) {
-      case ALL_MEMBERS: return true;
-      case ONLY_ADMINS: return isAdmin;
+      case ALL_MEMBERS: return memberLevel.isInGroup();
+      case ONLY_ADMINS: return memberLevel == GroupDatabase.MemberLevel.ADMINISTRATOR;
       default:          throw new AssertionError();
     }
   }

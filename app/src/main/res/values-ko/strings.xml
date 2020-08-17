@@ -42,6 +42,7 @@
   <string name="ApplicationPreferencesActivity_privacy_summary">화면 잠금 %1$s, 등록 잠금 %2$s</string>
   <string name="ApplicationPreferencesActivity_privacy_summary_screen_lock">화면 잠금 %1$s</string>
   <string name="ApplicationPreferencesActivity_appearance_summary">테마 %1$s, 언어 %2$s</string>
+  <string name="ApplicationPreferencesActivity_pin_created">번호가 생성되었습니다.</string>
   <!--AppProtectionPreferenceFragment-->
   <plurals name="AppProtectionPreferenceFragment_minutes">
     <item quantity="other">%d분</item>
@@ -77,7 +78,6 @@
   <string name="BlockUnblockDialog_block_and_leave_s">%1$s를 차단하고 나갈까요?</string>
   <string name="BlockUnblockDialog_block_s">%1$s를 차단할까요?</string>
   <string name="BlockUnblockDialog_group_members_will_be_able_to_add_you">그룹 멤버는 당신을 그룹에 다시 초대 가능합니다. </string>
-  <string name="BlockUnblockDialog_you_will_be_able_to_call_and_message_each_other">당신은 이제 서로 메시지를 전송하고 연락할 수 있습니다.</string>
   <string name="BlockUnblockDialog_unblock_s">%1$s를 차단 해제할까요?</string>
   <string name="BlockUnblockDialog_unblock">차단 해제</string>
   <string name="BlockUnblockDialog_block">차단</string>
@@ -148,7 +148,8 @@
   <string name="ContactShareEditActivity_type_missing">기타</string>
   <string name="ContactShareEditActivity_invalid_contact">선택한 연락처가 잘못됨</string>
   <!--ConversationItem-->
-  <string name="ConversationItem_error_not_delivered">전송 실패, 탭하여 자세히 보기</string>
+  <string name="ConversationItem_error_partially_not_delivered">일부만 송신됨, 탭하여 확인</string>
+  <string name="ConversationItem_error_network_not_delivered">보내기 실패</string>
   <string name="ConversationItem_received_key_exchange_message_tap_to_process">핵심 교환 메시지를 받았습니다. 탭하여 처리하세요.</string>
   <string name="ConversationItem_group_action_left">%1$s 님이 그룹에서 탈퇴했습니다.</string>
   <string name="ConversationItem_click_to_approve_unencrypted">전송 실패, 탭하여 비보안 연결 시도</string>
@@ -163,6 +164,7 @@
   <string name="ConversationItem_download_more"> 더 다운로드</string>
   <string name="ConversationItem_pending"> 대기 중</string>
   <string name="ConversationItem_this_message_was_deleted">본 메세지는 삭제되었습니다.&lt;br&gt;</string>
+  <string name="ConversationItem_you_deleted_this_message">이 메시지를 삭제했습니다.</string>
   <!--ConversationActivity-->
   <string name="ConversationActivity_reset_secure_session_question">보안 세션을 초기화하시겠습니까?</string>
   <string name="ConversationActivity_this_may_help_if_youre_having_encryption_problems">대화에서 암호화 문제가 발생할 경우 해당 기능이 도움이 될 수 있습니다. 메시지는 저장됩니다.</string>
@@ -180,11 +182,11 @@
   <string name="ConversationActivity_this_device_does_not_appear_to_support_dial_actions">해당 기기에서는 전화를 지원하지 않는 것 같습니다.</string>
   <string name="ConversationActivity_leave_group">그룹을 탈퇴하시겠습니까?</string>
   <string name="ConversationActivity_are_you_sure_you_want_to_leave_this_group">그룹에서 정말로 탈퇴하시겠습니까?</string>
+  <string name="ConversationActivity_choose_new_admin">새 관리자 선택</string>
   <string name="ConversationActivity_transport_insecure_sms">비보안 SMS</string>
   <string name="ConversationActivity_transport_insecure_mms">비보안 MMS</string>
   <string name="ConversationActivity_transport_signal">Signal</string>
   <string name="ConversationActivity_lets_switch_to_signal">Signal로 대화해요! %1$s</string>
-  <string name="ConversationActivity_error_leaving_group">그룹 탈퇴 오류</string>
   <string name="ConversationActivity_specify_recipient">연락처를 선택해 주세요.</string>
   <string name="ConversationActivity_unblock_this_contact_question">연락처를 차단 해제하시겠습니까?</string>
   <string name="ConversationActivity_unblock_this_group_question">그룹을 차단 해제하시겠습니까?</string>
@@ -250,6 +252,7 @@
   <string name="ConversationFragment_sms">SMS</string>
   <string name="ConversationFragment_deleting">삭제 중</string>
   <string name="ConversationFragment_deleting_messages">메시지 삭제 중…</string>
+  <string name="ConversationFragment_this_message_will_be_permanently_deleted_for_everyone">이 메시지가 대화에 참가한 모든 이들에게서 삭제됩니다. 멤버는 내가 메시지를 삭제했다는 것을 볼 수 있습니다.</string>
   <string name="ConversationFragment_quoted_message_not_found">원본 메시지를 찾을 수 없음</string>
   <string name="ConversationFragment_quoted_message_no_longer_available">원본 메시지를 더 이상 볼 수 없음</string>
   <string name="ConversationFragment_failed_to_open_message">메시지 열기 실패</string>
@@ -257,7 +260,6 @@
   <string name="ConversationFragment_you_can_swipe_to_the_left_reply">메시지를 왼쪽으로 쓸어서 빨리 답장할 수 있습니다.</string>
   <string name="ConversationFragment_outgoing_view_once_media_files_are_automatically_removed">한 번 볼 수 있는 미디어 파일은 전송 후 자동으로 삭제됩니다.</string>
   <string name="ConversationFragment_you_already_viewed_this_message">메시지를 이미 읽었습니다.</string>
-  <string name="ConversationFragment__you_can_add_notes_for_yourself_in_this_conversation">이 대화에서 당신은 당신에게 노트를 적을 수 있습니다. 만약 아무 기기나 당신의 계정과 연동되어 있다면, 새 노트는 동기화될 것 입니다.</string>
   <!--ConversationListActivity-->
   <string name="ConversationListActivity_there_is_no_browser_installed_on_your_device">기기에 설치된 브라우저가 없습니다.</string>
   <!--ConversationListFragment-->
@@ -277,21 +279,20 @@
   <plurals name="ConversationListFragment_moved_conversations_to_inbox">
     <item quantity="other">대화 %d개가 받은 메시지함으로 이동됨</item>
   </plurals>
-  <string name="ConversationListFragment__your_profile_name_has_been_created">당신의 프로필 이름이 생성되었습니다.</string>
-  <string name="ConversationListFragment__your_profile_name_has_been_saved">당신의 프로필 이름이 저장되었습니다.</string>
   <!--ConversationListItem-->
   <string name="ConversationListItem_key_exchange_message">핵심 교환 메시지</string>
   <!--ConversationListItemAction-->
   <string name="ConversationListItemAction_archived_conversations_d">보관된 대화(%d개)</string>
   <!--ConversationTitleView-->
   <string name="ConversationTitleView_verified">인증됨</string>
+  <string name="ConversationTitleView_you">나</string>
+  <!--CreateGroupActivity-->
   <!--CreateProfileActivity-->
   <string name="CreateProfileActivity__profile">프로필</string>
   <string name="CreateProfileActivity_error_setting_profile_photo">프로필 사진 설정 중 오류 발생</string>
   <string name="CreateProfileActivity_problem_setting_profile">프로필 설정 중 오류 발생</string>
   <string name="CreateProfileActivity_profile_photo">프로필 사진</string>
   <string name="CreateProfileActivity_set_up_your_profile">프로필을 설정하세요.</string>
-  <string name="CreateProfileActivity_signal_profiles_are_end_to_end_encrypted">Signal 프로필은 단대단 암호화되며, Signal 서비스는 해당 정보에 접근할 수 없습니다.</string>
   <string name="CreateProfileActivity_set_avatar_description">아바타 설정</string>
   <!--CustomDefaultPreference-->
   <string name="CustomDefaultPreference_using_custom">맞춤형 값 사용: %s</string>
@@ -343,22 +344,10 @@
   <!--GiphyFragmentPageAdapter-->
   <string name="GiphyFragmentPagerAdapter_gifs">GIF 파일</string>
   <string name="GiphyFragmentPagerAdapter_stickers">스티커</string>
-  <!--GroupCreateActivity-->
-  <string name="GroupCreateActivity_actionbar_title">새 그룹</string>
-  <string name="GroupCreateActivity_actionbar_edit_title">그룹 편집</string>
-  <string name="GroupCreateActivity_group_name_hint">그룹 이름</string>
-  <string name="GroupCreateActivity_actionbar_mms_title">새 MMS 그룹</string>
-  <string name="GroupCreateActivity_contacts_dont_support_push">선택한 연락처가 Signal 그룹을 지원하지 않아서 이 그룹은 MMS를 사용하게 됩니다.</string>
-  <string name="GroupCreateActivity_youre_not_registered_for_signal">Signal 메시지와 전화에 등록하지 않아서 Signal 그룹이 사용 중지되었습니다. Signal 설정 - 고급 메뉴에서 다시 등록해 주세요.</string>
-  <string name="GroupCreateActivity_contacts_no_members">그룹에서 한 명 이상을 선택해야 합니다!</string>
-  <string name="GroupCreateActivity_contacts_invalid_number">그룹 멤버 중 한 명의 전화번호를 읽을 수 없습니다. 해당 연락처를 수정 또는 삭제한 후 다시 시도해 주세요.</string>
-  <string name="GroupCreateActivity_avatar_content_description">그룹 아바타</string>
-  <string name="GroupCreateActivity_menu_apply_button">적용</string>
-  <string name="GroupCreateActivity_creating_group">%1$s 그룹 생성 중…</string>
-  <string name="GroupCreateActivity_updating_group">%1$s 그룹 업데이트 중…</string>
-  <string name="GroupCreateActivity_cannot_add_non_push_to_existing_group">%1$s 님은 Signal 사용자가 아니므로 추가할 수 없습니다.</string>
-  <string name="GroupCreateActivity_loading_group_details">그룹 세부 정보 로드 중…</string>
-  <string name="GroupCreateActivity_youre_already_in_the_group">이미 그룹에 있습니다.</string>
+  <!--AddToGroupActivity-->
+  <!--ChooseNewAdminActivity-->
+  <string name="ChooseNewAdminActivity_choose_new_admin">새 관리자 선택</string>
+  <string name="ChooseNewAdminActivity_done">확인</string>
   <!--GroupShareProfileView-->
   <string name="GroupShareProfileView_share_your_profile_name_and_photo_with_this_group">프로필 이름과 사진을 그룹과 공유하시겠습니까?</string>
   <string name="GroupShareProfileView_do_you_want_to_make_your_profile_name_and_photo_visible_to_all_current_and_future_members_of_this_group">프로필 이름과 사진이 그룹의 모든 멤버에게 항상 표시되도록 하시겠습니까?</string>
@@ -366,33 +355,60 @@
   <!--GroupMembersDialog-->
   <string name="GroupMembersDialog_you">나</string>
   <!--GV2 access levels-->
+  <!--GV2 invites sent-->
+  <string name="GroupManagement_learn_more">더 알아보기</string>
   <!--PendingMembersActivity-->
   <string name="PendingMembersActivity_people_you_invited">초대한 사람들</string>
   <string name="PendingMembersActivity_invites_by_other_group_members">다른 그룹 멤버들의 초대</string>
   <string name="PendingMembersActivity_missing_detail_explanation">다른 그룹 멤버들이 초대한 사람들의 세부정보는 표시되지 않습니다. 초대된 사람이 참가하기로 했다면, 정보가 즉시 그룹에 공유됩니다. 참가할 때까지 그룹 내 메시지는 볼 수 없습니다. </string>
+  <!--AddMembersActivity-->
+  <string name="AddMembersActivity__done">확인</string>
   <!--AddGroupDetailsFragment-->
+  <string name="AddGroupDetailsFragment__create_group">그룹 만들기</string>
   <string name="AddGroupDetailsFragment__create">생성</string>
   <string name="AddGroupDetailsFragment__members">멤버</string>
   <string name="AddGroupDetailsFragment__group_name_required">그룹 이름(필수)</string>
   <string name="AddGroupDetailsFragment__remove">삭제</string>
+  <!--NonGv2MemberDialog-->
   <!--ManageGroupActivity-->
   <string name="ManageGroupActivity_disappearing_messages">사라지는 메시지</string>
+  <string name="ManageGroupActivity_add_members">멤버 추가</string>
   <string name="ManageGroupActivity_leave_group">그룹 탈퇴</string>
   <string name="ManageGroupActivity_mute_notifications">대화 알림 끄기</string>
   <string name="ManageGroupActivity_custom_notifications">맞춤형 알림</string>
   <string name="ManageGroupActivity_off">꺼짐</string>
   <string name="ManageGroupActivity_on">켜짐</string>
-  <string name="ManageGroupActivity_add_members">멤버 추가</string>
   <string name="ManageGroupActivity_view_all_members">모든 멤버 보기</string>
+  <string name="ManageGroupActivity_none">없음</string>
+  <!--GroupMentionSettingDialog-->
+  <!--ManageRecipientActivity-->
+  <string name="ManageRecipientActivity_disappearing_messages">사라지는 메시지</string>
+  <string name="ManageRecipientActivity_block">차단</string>
+  <string name="ManageRecipientActivity_unblock">차단 해제</string>
+  <string name="ManageRecipientActivity_view_safety_number">안전 번호 보기</string>
+  <string name="ManageRecipientActivity_mute_notifications">대화 알림 끄기</string>
+  <string name="ManageRecipientActivity_custom_notifications">맞춤형 알림</string>
+  <string name="ManageRecipientActivity_off">꺼짐</string>
+  <string name="ManageRecipientActivity_on">켜짐</string>
+  <string name="ManageRecipientActivity_message_description">메시지</string>
   <!--CustomNotificationsDialogFragment-->
   <string name="CustomNotificationsDialogFragment__custom_notifications">맞춤형 알림</string>
   <string name="CustomNotificationsDialogFragment__messages">메시지</string>
   <string name="CustomNotificationsDialogFragment__notification_sound">알림 벨소리</string>
   <string name="CustomNotificationsDialogFragment__vibrate">진동</string>
-  <!--GV2 Invite cancellation confirmation-->
+  <string name="CustomNotificationsDialogFragment__call_settings">전화 설정</string>
+  <string name="CustomNotificationsDialogFragment__ringtone">벨소리</string>
+  <string name="CustomNotificationsDialogFragment__enabled">활성화됨</string>
+  <string name="CustomNotificationsDialogFragment__disabled">비활성화됨</string>
+  <string name="CustomNotificationsDialogFragment__default">기본값</string>
+  <!--GV2 Invite Revoke confirmation dialog-->
   <!--CropImageActivity-->
   <string name="CropImageActivity_group_avatar">그룹 아바타</string>
   <string name="CropImageActivity_profile_avatar">아바타</string>
+  <!--ImageEditorHud-->
+  <string name="ImageEditorHud_blur_faces">얼굴 블러</string>
+  <string name="ImageEditorHud_draw_anywhere_to_blur">아무 곳이나 그려서 가릴 수 있습니다</string>
+  <string name="ImageEditorHud_draw_to_blur_additional_faces_or_areas">다른 사람의 얼굴이나 영역을 그어서 가릴 수 있습니다</string>
   <!--InputPanel-->
   <string name="InputPanel_tap_and_hold_to_record_a_voice_message_release_to_send">길게 탭하여 음성 메시지를 녹음하고, 손을 떼어 보내기</string>
   <!--InviteActivity-->
@@ -418,9 +434,6 @@
   <string name="Job_working_in_the_background">백그라운드에서 실행 중…</string>
   <!--LearnMoreTextView-->
   <string name="LearnMoreTextView_learn_more">더 알아보기</string>
-  <!--MessageDetailsRecipient-->
-  <string name="MessageDetailsRecipient_failed_to_send">전송 실패</string>
-  <string name="MessageDetailsRecipient_new_safety_number">새 안전 번호</string>
   <!--LongMessageActivity-->
   <string name="LongMessageActivity_unable_to_find_message">메시지를 찾을 수 없음</string>
   <string name="LongMessageActivity_message_from_s">%1$s에게서 온 메시지</string>
@@ -524,6 +537,7 @@
   <string name="MessageRecord_s_disabled_disappearing_messages">%1$s 님이 사라지는 메시지 기능을 비활성화했습니다.</string>
   <string name="MessageRecord_you_set_disappearing_message_time_to_s">사라지는 메시지 시간을 %1$s(으)로 설정했습니다.</string>
   <string name="MessageRecord_s_set_disappearing_message_time_to_s">%1$s 님이 사라지는 메시지 시간을 %2$s(으)로 설정했습니다.</string>
+  <!--Profile change updates-->
   <!--GV2 specific-->
   <string name="MessageRecord_you_created_the_group">그룹을 생성했습니다.</string>
   <string name="MessageRecord_group_updated">그룹 업데이트됨.</string>
@@ -533,7 +547,9 @@
   <!--GV2 member removals-->
   <string name="MessageRecord_you_left_the_group">당신은 그룹에서 떠났습니다.</string>
   <!--GV2 role change-->
+  <string name="MessageRecord_you_are_now_an_admin">관리자가 되었습니다.</string>
   <!--GV2 invitations-->
+  <string name="MessageRecord_you_were_invited_to_the_group">그룹에 초대되었습니다.</string>
   <!--GV2 invitation revokes-->
   <!--GV2 invitation acceptance-->
   <!--GV2 title change-->
@@ -551,9 +567,7 @@
   <string name="MessageRequestBottomView_delete">삭제</string>
   <string name="MessageRequestBottomView_block">차단</string>
   <string name="MessageRequestBottomView_unblock">차단 해제</string>
-  <string name="MessageRequestBottomView_do_you_want_to_let_s_message_you_they_wont_know_youve_seen_their_messages_until_you_accept">%1$s가 메시지를 할 수 있도록 할까요? 그들은 당신이 동의할 때까지 당신이 그들의 메시지를 봤는지 확인할 수 없습니다.</string>
-  <string name="MessageRequestBottomView_do_you_want_to_join_the_group_s_they_wont_know_youve_seen_their_messages_until_you_accept">%1$s 그룹에 참가할까요? 당신이 동의하기 전에는 당신이 그들의 메시지를 봤는지 타인이 알 수 없습니다. </string>
-  <string name="MessageRequestBottomView_unblock_s_to_message_and_call_each_other">%1$s를 차단 해제하여 서로 전화 및 메시지 교류</string>
+  <string name="MessageRequestBottomView_unblock_this_group_and_share_your_name_and_photo_with_its_members">이 그룹을 차단 해제하고 그룹 멤버에게 내 이름과 사진을 공유하시겠습니까? 차단을 해제하기 전까지는 메시지를 받지 않습니다.</string>
   <string name="MessageRequestProfileView_member_of_one_group">%1$s 멤버</string>
   <string name="MessageRequestProfileView_member_of_two_groups">%1$s 및 %2$s 멤버</string>
   <string name="MessageRequestProfileView_member_of_many_groups">%1$s, %2$s 및 %3$s 멤버</string>
@@ -563,16 +577,12 @@
   <plurals name="MessageRequestProfileView_members_and_invited">
     <item quantity="other">%1$d 멤버 (+ %2$d 초대됨)</item>
   </plurals>
-  <plurals name="MessageRequestProfileView_member_of_others">
-    <item quantity="other">기타 %d명</item>
-  </plurals>
   <!--PassphraseChangeActivity-->
   <string name="PassphraseChangeActivity_passphrases_dont_match_exclamation">암호가 일치하지 않습니다!</string>
   <string name="PassphraseChangeActivity_incorrect_old_passphrase_exclamation">기존 암호가 잘못되었습니다!</string>
   <string name="PassphraseChangeActivity_enter_new_passphrase_exclamation">새 암호를 입력하세요!</string>
   <!--DeviceProvisioningActivity-->
   <string name="DeviceProvisioningActivity_link_this_device">기기를 연결하시겠습니까?</string>
-  <string name="DeviceProvisioningActivity_cancel">취소</string>
   <string name="DeviceProvisioningActivity_continue">계속</string>
   <string name="DeviceProvisioningActivity_content_intro">다음 수행 가능:</string>
   <string name="DeviceProvisioningActivity_content_bullets">
@@ -619,6 +629,8 @@
   <string name="PinRestoreEntryFragment_enter_numeric_pin">숫자 번호 입력</string>
   <!--PinRestoreLockedFragment-->
   <string name="PinRestoreLockedFragment_create_your_pin">번호 생성</string>
+  <!--PinOptOutDialog-->
+  <string name="PinOptOutDialog_disable_pin">PIN 비활성화</string>
   <!--RatingManager-->
   <string name="RatingManager_rate_this_app">앱 평가</string>
   <string name="RatingManager_if_you_enjoy_using_this_app_please_take_a_moment">앱이 마음에 들면 평가해 주세요.</string>
@@ -767,7 +779,6 @@
   <string name="SubmitDebugLogActivity_failed_to_submit_logs">로그를 제출하는데 실패했습니다.</string>
   <string name="SubmitDebugLogActivity_success">성공!</string>
   <string name="SubmitDebugLogActivity_copied_to_clipboard">클립보드로 복사됨</string>
-  <string name="SubmitDebugLogActivity_ok">확인</string>
   <string name="SubmitDebugLogActivity_share">공유</string>
   <!--SupportEmailUtil-->
   <string name="SupportEmailUtil_signal_version">Signal 버전:</string>
@@ -786,6 +797,7 @@
   <string name="ThreadRecord_view_once_video">한 번 볼 수 있는 동영상</string>
   <string name="ThreadRecord_view_once_media">한 번 볼 수 있는 미디어</string>
   <string name="ThreadRecord_this_message_was_deleted">본 메세지는 삭제되었습니다.&lt;br&gt;</string>
+  <string name="ThreadRecord_you_deleted_this_message">이 메시지를 삭제했습니다.</string>
   <string name="ThreadRecord_s_is_on_signal">%s 님이 온라인입니다!</string>
   <string name="ThreadRecord_disappearing_messages_disabled">사라지는 메시지 기능이 비활성화됨</string>
   <string name="ThreadRecord_disappearing_message_time_updated_to_s">사라지는 메시지 시간을 %s(으)로 설정했습니다.</string>
@@ -795,6 +807,12 @@
   <string name="ThreadRecord_you_marked_unverified">인증되지 않음으로 표시했습니다.</string>
   <string name="ThreadRecord_message_could_not_be_processed">메시지를 처리할 수 없음</string>
   <string name="ThreadRecord_message_request">메시지 요청</string>
+  <string name="ThreadRecord_photo">사진</string>
+  <string name="ThreadRecord_gif">GIF</string>
+  <string name="ThreadRecord_voice_message">음성 메시지</string>
+  <string name="ThreadRecord_contact">연락처</string>
+  <string name="ThreadRecord_file">파일</string>
+  <string name="ThreadRecord_video">동영상</string>
   <!--UpdateApkReadyListener-->
   <string name="UpdateApkReadyListener_Signal_update">Signal 업데이트</string>
   <string name="UpdateApkReadyListener_a_new_version_of_signal_is_available_tap_to_update">새 Signal 버전 출시, 탭하여 업데이트</string>
@@ -820,7 +838,6 @@
   <string name="UsernameEditFragment_encountered_a_network_error">네트워크 오류가 발생했습니다.</string>
   <string name="UsernameEditFragment_this_username_is_taken">사용 중인 사용자 이름입니다.</string>
   <string name="UsernameEditFragment_this_username_is_available">사용할 수 있는 사용자 이름입니다.</string>
-  <string name="UsernameEditFragment_usernames_can_only_include">사용자 이름에는 a~Z, 0~9와 언더바만 사용할 수 있습니다.</string>
   <string name="UsernameEditFragment_usernames_cannot_begin_with_a_number">사용자 이름은 숫자로 시작할 수 없습니다.</string>
   <string name="UsernameEditFragment_username_is_invalid">잘못된 사용자 이름입니다.</string>
   <string name="UsernameEditFragment_usernames_must_be_between_a_and_b_characters">사용자 이름은 %1$d~%2$d자여야 합니다. </string>
@@ -836,6 +853,7 @@
   <string name="VerifyIdentityActivity_signal_needs_the_camera_permission_in_order_to_scan_a_qr_code_but_it_has_been_permanently_denied">Signal에서 QR 코드를 읽으려면 카메라 권한이 필요하지만 현재 거부되어 있습니다. 앱 설정 메뉴에서 \'권한\'을 선택한 후 \'카메라\' 항목을 허용해 주세요.</string>
   <string name="VerifyIdentityActivity_unable_to_scan_qr_code_without_camera_permission">QR 코드를 읽으려면 카메라 권한이 필요함</string>
   <!--ViewOnceMessageActivity-->
+  <!--AudioView-->
   <!--MessageDisplayHelper-->
   <string name="MessageDisplayHelper_bad_encrypted_message">잘못된 암호화 메시지</string>
   <string name="MessageDisplayHelper_message_encrypted_for_non_existing_session">존재하지 않는 세션의 암호화 메시지</string>
@@ -845,7 +863,7 @@
   <!--MuteDialog-->
   <string name="MuteDialog_mute_notifications">대화 알림 끄기</string>
   <!--OutdatedBuildReminder-->
-  <string name="OutdatedBuildReminder_no_web_browser_installed">웹 브라우저가 설치되지 않았습니다!</string>
+  <!-- Removed by excludeNonTranslatables <string name="OutdatedBuildReminder_no_web_browser_installed">웹 브라우저가 설치되지 않았습니다!</string> -->
   <!--ApplicationMigrationService-->
   <string name="ApplicationMigrationService_import_in_progress">가져오는 중</string>
   <string name="ApplicationMigrationService_importing_text_messages">문자 메시지 가져오는 중</string>
@@ -1003,6 +1021,7 @@
   <!--contact_selection_list_fragment-->
   <string name="contact_selection_list_fragment__signal_needs_access_to_your_contacts_in_order_to_display_them">Signal에서 연락처를 표시하려면 연락처 권한이 필요합니다.</string>
   <string name="contact_selection_list_fragment__show_contacts">연락처 표시</string>
+  <!--contact_selection_list_item-->
   <!--conversation_activity-->
   <string name="conversation_activity__type_message_push">Signal 메시지</string>
   <string name="conversation_activity__type_message_sms_insecure">비보안 SMS</string>
@@ -1044,6 +1063,10 @@
   <string name="QuoteView_original_missing">원본 메시지를 찾을 수 없음</string>
   <!--conversation_fragment-->
   <string name="conversation_fragment__scroll_to_the_bottom_content_description">하단으로 스크롤</string>
+  <!--safety_number_change_dialog-->
+  <string name="safety_number_change_dialog__safety_number_changes">안전 번호 변경됨</string>
+  <string name="safety_number_change_dialog__the_following_people_may_have_reinstalled_or_changed_devices">재설치했거나 기기를 바꾼 사람의 목록입니다. 보안을 보장하려면 안전 번호를 검증하세요.</string>
+  <string name="safety_number_change_dialog__view">보기</string>
   <!--country_selection_fragment-->
   <string name="country_selection_fragment__loading_countries">국가 로드 중…</string>
   <string name="country_selection_fragment__search">검색</string>
@@ -1081,6 +1104,7 @@
     <item quantity="other">%d주</item>
   </plurals>
   <string name="expiration_weeks_abbreviated">%d주</string>
+  <string name="expiration_combined">%1$s %2$s</string>
   <!--unverified safety numbers-->
   <string name="IdentityUtil_unverified_banner_one">%s 님과의 안전 번호가 변경되었으며 인증이 취소되었습니다.</string>
   <string name="IdentityUtil_unverified_banner_two">%1$s, %2$s 님과의 안전 번호가 변경되었으며 인증이 취소되었습니다.</string>
@@ -1155,19 +1179,6 @@
   <string name="EditProfileFragment__group_name">그룹 이름</string>
   <!--recipient_preferences_activity-->
   <string name="recipient_preference_activity__shared_media">공유된 미디어</string>
-  <!--recipient_preferences-->
-  <string name="recipient_preferences__mute_conversation">대화 알림 끄기</string>
-  <string name="recipient_preferences__custom_notifications">맞춤형 알림</string>
-  <string name="recipient_preferences__custom_notifications_settings">시스템 알림 설정</string>
-  <string name="recipient_preferences__notification_sound">알림 벨소리</string>
-  <string name="recipient_preferences__vibrate">진동</string>
-  <string name="recipient_preferences__block">차단</string>
-  <string name="recipient_preferences__color">색상</string>
-  <string name="recipient_preferences__view_safety_number">안전 번호 보기</string>
-  <string name="recipient_preferences__chat_settings">대화 설정</string>
-  <string name="recipient_preferences__privacy">개인 정보</string>
-  <string name="recipient_preferences__call_settings">전화 설정</string>
-  <string name="recipient_preferences__ringtone">벨소리</string>
   <!--- redphone_call_controls-->
   <string name="redphone_call_card__signal_call">Signal 전화</string>
   <!--registration_activity-->
@@ -1199,9 +1210,10 @@
   <string name="message_details_header__received">받은 시간</string>
   <string name="message_details_header__disappears">사라짐</string>
   <string name="message_details_header__via">형식</string>
-  <string name="message_details_header__to">수신자</string>
-  <string name="message_details_header__from">발신자</string>
-  <string name="message_details_header__with">참조</string>
+  <!--message_details_recipient_header-->
+  <!--message_Details_recipient-->
+  <string name="message_details_recipient__failed_to_send">전송 실패</string>
+  <string name="message_details_recipient__new_safety_number">새 안전 번호</string>
   <!--AndroidManifest.xml-->
   <string name="AndroidManifest__create_passphrase">암호 생성</string>
   <string name="AndroidManifest__select_contacts">연락처 선택</string>
@@ -1224,6 +1236,10 @@
   <string name="HelpFragment__signal_support">Signal 지원</string>
   <string name="HelpFragment__please_be_as_descriptive_as_possible">저희가 문제를 해결할 수 있도록 최대한으로 설명해 주세요.</string>
   <!--ReactWithAnyEmojiBottomSheetDialogFragment-->
+  <string name="ReactWithAnyEmojiBottomSheetDialogFragment__activities">활동</string>
+  <string name="ReactWithAnyEmojiBottomSheetDialogFragment__objects">물체</string>
+  <string name="ReactWithAnyEmojiBottomSheetDialogFragment__symbols">부호</string>
+  <string name="ReactWithAnyEmojiBottomSheetDialogFragment__flags">국기</string>
   <!--arrays.xml-->
   <string name="arrays__import_export">가져오기</string>
   <string name="arrays__use_default">기본값 사용</string>
@@ -1262,8 +1278,8 @@
   <string name="preferences__use_signal_for_viewing_and_storing_all_incoming_multimedia_messages">Signal에서 모든 수신 멀티미디어 메시지 받기</string>
   <string name="preferences__pref_enter_sends_title">엔터 키로 메시지 보내기</string>
   <string name="preferences__pressing_the_enter_key_will_send_text_messages">엔터 키로 메시지 보내기</string>
-  <string name="preferences__send_link_previews">링크 미리 보기 보내기</string>
-  <string name="preferences__previews_are_supported_for">미리 보기는 임거, 인스타그램, 핀터레스트, 레딧과 유튜브 링크를 지원합니다.</string>
+  <!-- Removed by excludeNonTranslatables <string name="preferences__send_link_previews">링크 미리 보기 보내기</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="preferences__previews_are_supported_for">미리 보기는 임거, 인스타그램, 핀터레스트, 레딧과 유튜브 링크를 지원합니다.</string> -->
   <string name="preferences__choose_identity">내 연락처 선택</string>
   <string name="preferences__choose_your_contact_entry_from_the_contacts_list">연락처에서 내 연락처를 선택하세요.</string>
   <string name="preferences__change_passphrase">암호 변경</string>
@@ -1325,6 +1341,7 @@
   <string name="preferences__dark_theme">어둡게</string>
   <string name="preferences__appearance">모양</string>
   <string name="preferences__theme">테마</string>
+  <string name="preferences__disable_pin">PIN 비활성화</string>
   <string name="preferences__system_default">시스템 기본값</string>
   <string name="preferences__default">기본값</string>
   <string name="preferences__language">언어</string>
@@ -1375,6 +1392,7 @@
   <string name="preferences_communication__sealed_sender_allow_from_anyone">모두에게 허용</string>
   <string name="preferences_communication__sealed_sender_allow_from_anyone_description">연락처에 없는 사람과 프로필을 공유하지 않은 사람이 나에게 보내는 메시지에도 발신자 암호화를 허용합니다.</string>
   <string name="preferences_communication__sealed_sender_learn_more">더 알아보기</string>
+  <!--Internal only preferences-->
   <!--****************************************-->
   <!--menus-->
   <!--****************************************-->
@@ -1407,6 +1425,8 @@
   <string name="conversation_list_batch__menu_select_all">모두 선택</string>
   <string name="conversation_list_batch_archive__menu_archive_selected">선택한 대화 보관</string>
   <string name="conversation_list_batch_unarchive__menu_unarchive_selected">선택한 대화 보관 취소</string>
+  <string name="conversation_list_batch__menu_unarchive_selected">선택한 대화 보관 취소</string>
+  <string name="conversation_list_batch__menu_mark_as_read">읽음으로 표시</string>
   <!--conversation_list-->
   <string name="conversation_list_settings_shortcut">설정 단축키</string>
   <string name="conversation_list_search_description">검색</string>
@@ -1523,7 +1543,6 @@
   <string name="CreateKbsPinFragment__create_a_new_pin">새 번호 생성</string>
   <string name="CreateKbsPinFragment__you_can_choose_a_new_pin_as_long_as_this_device_is_registered">기기가 등록된 동안은 PIN 번호를 언제든지 변경할 수 있습니다</string>
   <string name="CreateKbsPinFragment__create_your_pin">내 번호 생성</string>
-  <string name="CreateKbsPinFragment__pins_keep_information_stored_with_signal_encrypted">PIN 번호는 정보를 Signal에서 암호화하여 저장하므로 사용자만 액세스할 수 있습니다. 프로필, 설정과 연락처는 Signal을 다시 설치할 때 복원됩니다.</string>
   <string name="CreateKbsPinFragment__choose_a_stronger_pin">더 강력한 PIN 번호 선택</string>
   <!--ConfirmKbsPinFragment-->
   <string name="ConfirmKbsPinFragment__pins_dont_match">번호가 일치하지 않습니다. 다시 시도해 주세요.</string>
@@ -1534,13 +1553,14 @@
   <string name="ConfirmKbsPinFragment__creating_pin">번호 생성 중…</string>
   <!--KbsSplashFragment-->
   <string name="KbsSplashFragment__introducing_pins">번호를 소개합니다.</string>
-  <string name="KbsSplashFragment__pins_keep_information_stored_with_signal_encrypted">PIN 번호는 정보를 Signal에서 암호화하여 저장하므로 사용자만 액세스할 수 있습니다. 프로필, 설정과 연락처는 Signal을 다시 설치할 때 복원됩니다.</string>
   <string name="KbsSplashFragment__learn_more">더 알아보기</string>
   <string name="KbsSplashFragment__registration_lock_equals_pin">등록 잠금 = 번호</string>
   <string name="KbsSplashFragment__your_registration_lock_is_now_called_a_pin">등록 잠금을 번호라 합니다. 하지만, 단순한 번호 그 이상입니다. 지금 업데이트하세요.</string>
   <string name="KbsSplashFragment__read_more_about_pins">번호에 관해 더 알아보세요.</string>
   <string name="KbsSplashFragment__update_pin">번호 업데이트</string>
   <string name="KbsSplashFragment__create_your_pin">번호 생성</string>
+  <string name="KbsSplashFragment__learn_more_about_pins">PIN에 대해 더 알아보기</string>
+  <string name="KbsSplashFragment__disable_pin">PIN 비활성화</string>
   <!--KBS Reminder Dialog-->
   <string name="KbsReminderDialog__enter_your_signal_pin">Signal 번호 입력</string>
   <string name="KbsReminderDialog__to_help_you_memorize_your_pin">주기적으로 번호를 입력하면 외우는 데 도움이 됩니다. 가끔씩만 여쭤보겠습니다.</string>
@@ -1588,13 +1608,6 @@
   <string name="KbsMegaphone__update_pin">번호 업데이트</string>
   <string name="KbsMegaphone__well_remind_you_later_creating_a_pin">나중에 알려드리겠습니다. %1$d일 후에는 번호를 생성하셔야 합니다.</string>
   <string name="KbsMegaphone__well_remind_you_later_confirming_your_pin">나중에 알려드리겠습니다. %1$d일 후에는 번호를 확인하셔야 합니다.</string>
-  <!--Profile Names Megaphone-->
-  <string name="ProfileNamesMegaphone__add_a_profile_name">프로필 이름 추가</string>
-  <string name="ProfileNamesMegaphone__this_will_be_displayed_when_you_start">새 대화를 시작 또는 공유할 때 표시됩니다.</string>
-  <string name="ProfileNamesMegaphone__add_profile_name">프로필 이름 추가</string>
-  <string name="ProfileNamesMegaphone__confirm_your_profile_name">프로필 이름 확인</string>
-  <string name="ProfileNamesMegaphone__your_profile_can_now_include">이제 프로필에 성을 추가할 수 있습니다.</string>
-  <string name="ProfileNamesMegaphone__confirm_name">이름 확인</string>
   <!--transport_selection_list_item-->
   <string name="transport_selection_list_item__transport_icon">아이콘 전송</string>
   <string name="ConversationListFragment_loading">로드 중…</string>
@@ -1703,12 +1716,14 @@
   <string name="recipient_preferences__about">정보</string>
   <string name="Recipient_unknown">알 수 없음</string>
   <!--RecipientBottomSheet-->
-  <string name="RecipientBottomSheet_message">메시지</string>
-  <string name="RecipientBottomSheet_call">전화</string>
   <string name="RecipientBottomSheet_block">차단</string>
   <string name="RecipientBottomSheet_unblock">차단 해제</string>
+  <string name="RecipientBottomSheet_add_to_contacts">연락처에 추가</string>
   <string name="RecipientBottomSheet_view_safety_number">안전 번호 보기</string>
+  <string name="RecipientBottomSheet_message_description">메시지</string>
   <string name="RecipientBottomSheet_remove">삭제</string>
+  <string name="RecipientBottomSheet_copied_to_clipboard">클립보드로 복사됨</string>
   <string name="GroupRecipientListItem_admin">관리자</string>
+  <!--GroupsLearnMoreBottomSheetDialogFragment-->
   <!--EOF-->
 </resources>

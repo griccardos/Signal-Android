@@ -12,6 +12,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobs.RefreshAttributesJob;
+import org.thoughtcrime.securesms.jobs.RefreshOwnProfileJob;
 import org.thoughtcrime.securesms.jobs.RemoteConfigRefreshJob;
 import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.logging.Log;
@@ -47,22 +48,18 @@ public final class FeatureFlags {
 
   private static final long FETCH_INTERVAL = TimeUnit.HOURS.toMillis(2);
 
-  private static final String UUIDS                      = "android.uuids";
-  private static final String MESSAGE_REQUESTS           = "android.messageRequests";
   private static final String USERNAMES                  = "android.usernames";
-  private static final String PINS_FOR_ALL_LEGACY        = "android.pinsForAll";
-  private static final String PINS_FOR_ALL               = "android.pinsForAll.2";
-  private static final String PINS_FOR_ALL_MANDATORY     = "android.pinsForAllMandatory";
-  private static final String PINS_MEGAPHONE_KILL_SWITCH = "android.pinsMegaphoneKillSwitch";
-  private static final String PROFILE_NAMES_MEGAPHONE    = "android.profileNamesMegaphone";
-  private static final String ATTACHMENTS_V3             = "android.attachmentsV3";
+  private static final String ATTACHMENTS_V3             = "android.attachmentsV3.2";
   private static final String REMOTE_DELETE              = "android.remoteDelete";
-  private static final String PROFILE_FOR_CALLING        = "android.profileForCalling";
-  private static final String CALLING_PIP                = "android.callingPip";
-  private static final String NEW_GROUP_UI               = "android.newGroupUI";
-  private static final String REACT_WITH_ANY_EMOJI       = "android.reactWithAnyEmoji";
-  private static final String GROUPS_V2                  = "android.groupsv2";
-  private static final String GROUPS_V2_CREATE           = "android.groupsv2.create";
+  private static final String GROUPS_V2_OLD_1            = "android.groupsv2";
+  private static final String GROUPS_V2_OLD_2            = "android.groupsv2.2";
+  private static final String GROUPS_V2                  = "android.groupsv2.3";
+  private static final String GROUPS_V2_CREATE           = "android.groupsv2.create.3";
+  private static final String GROUPS_V2_CAPACITY         = "global.groupsv2.maxGroupSize";
+  private static final String CDS                        = "android.cds.3";
+  private static final String INTERNAL_USER              = "android.internalUser";
+  private static final String MENTIONS                   = "android.mentions";
+  private static final String VERIFY_V2                  = "android.verifyV2";
 
   /**
    * We will only store remote values for flags in this set. If you want a flag to be controllable
@@ -70,18 +67,15 @@ public final class FeatureFlags {
    */
 
   private static final Set<String> REMOTE_CAPABLE = Sets.newHashSet(
-      PINS_FOR_ALL_LEGACY,
-      PINS_FOR_ALL,
-      PINS_FOR_ALL_MANDATORY,
-      PINS_MEGAPHONE_KILL_SWITCH,
-      PROFILE_NAMES_MEGAPHONE,
-      MESSAGE_REQUESTS,
       ATTACHMENTS_V3,
       REMOTE_DELETE,
-      PROFILE_FOR_CALLING,
-      CALLING_PIP,
-      NEW_GROUP_UI,
-      REACT_WITH_ANY_EMOJI
+      GROUPS_V2,
+      GROUPS_V2_CREATE,
+      GROUPS_V2_CAPACITY,
+      CDS,
+      INTERNAL_USER,
+      MENTIONS,
+      VERIFY_V2
   );
 
   /**
@@ -102,19 +96,20 @@ public final class FeatureFlags {
    * more burden on the reader to ensure that the app experience remains consistent.
    */
   private static final Set<String> HOT_SWAPPABLE = Sets.newHashSet(
-      PINS_MEGAPHONE_KILL_SWITCH,
       ATTACHMENTS_V3,
-      REACT_WITH_ANY_EMOJI
+      GROUPS_V2_CREATE,
+      VERIFY_V2
   );
 
   /**
    * Flags in this set will stay true forever once they receive a true value from a remote config.
    */
   private static final Set<String> STICKY = Sets.newHashSet(
-      PINS_FOR_ALL_LEGACY,
-      PINS_FOR_ALL,
-      GROUPS_V2
-  );
+      GROUPS_V2,
+      GROUPS_V2_OLD_1,
+      GROUPS_V2_OLD_2,
+      VERIFY_V2
+    );
 
   /**
    * Listeners that are called when the value in {@link #REMOTE_VALUES} changes. That means that
@@ -128,8 +123,13 @@ public final class FeatureFlags {
    * desired test state.
    */
   private static final Map<String, OnFlagChange> FLAG_CHANGE_LISTENERS = new HashMap<String, OnFlagChange>() {{
-    put(MESSAGE_REQUESTS, (change) -> SignalStore.setMessageRequestEnableTime(change == Change.ENABLED ? System.currentTimeMillis() : 0));
-    put(GROUPS_V2,        (change) -> ApplicationDependencies.getJobManager().add(new RefreshAttributesJob()));
+    put(GROUPS_V2, (change) -> {
+      if (change == Change.ENABLED) {
+        ApplicationDependencies.getJobManager().startChain(new RefreshAttributesJob())
+                               .then(new RefreshOwnProfileJob())
+                               .enqueue();
+      }
+    });
   }};
 
   private static final Map<String, Object> REMOTE_VALUES = new TreeMap<>();
@@ -177,57 +177,9 @@ public final class FeatureFlags {
     Log.i(TAG, "[Disk]   After : " + result.getDisk().toString());
   }
 
-  /** UUID-related stuff that shouldn't be activated until the user-facing launch. */
-  public static synchronized boolean uuids() {
-    return getBoolean(UUIDS, false);
-  }
-
-  /** Favoring profile names when displaying contacts. */
-  public static synchronized boolean profileDisplay() {
-    return messageRequests();
-  }
-
-  /** MessageRequest stuff */
-  public static synchronized boolean messageRequests() {
-    return getBoolean(MESSAGE_REQUESTS, false);
-  }
-
-  /** Creating usernames, sending messages by username. Requires {@link #uuids()}. */
+  /** Creating usernames, sending messages by username. */
   public static synchronized boolean usernames() {
-    boolean value = getBoolean(USERNAMES, false);
-    if (value && !uuids()) throw new MissingFlagRequirementError();
-    return value;
-  }
-
-  /**
-   * - Starts showing prompts for users to create PINs.
-   * - Shows new reminder UI.
-   * - Shows new settings UI.
-   * - Syncs to storage service.
-   */
-  public static boolean pinsForAll() {
-    return SignalStore.registrationValues().pinWasRequiredAtRegistration() ||
-           SignalStore.kbsValues().isV2RegistrationLockEnabled()           ||
-           SignalStore.kbsValues().hasPin()                                ||
-           pinsForAllMandatory()                                           ||
-           getBoolean(PINS_FOR_ALL_LEGACY, false)                          ||
-           getBoolean(PINS_FOR_ALL, false);
-  }
-
-  /** Makes it so the user will eventually see a fullscreen splash requiring them to create a PIN. */
-  public static boolean pinsForAllMandatory() {
-    return getBoolean(PINS_FOR_ALL_MANDATORY, false);
-  }
-
-  /** Safety flag to disable Pins for All Megaphone */
-  public static boolean pinsForAllMegaphoneKillSwitch() {
-    return getBoolean(PINS_MEGAPHONE_KILL_SWITCH, false);
-  }
-
-  /** Safety switch for disabling profile names megaphone */
-  public static boolean profileNamesMegaphone() {
-    return getBoolean(PROFILE_NAMES_MEGAPHONE, false) &&
-           TextSecurePreferences.getFirstInstallVersion(ApplicationDependencies.getApplication()) < 600;
+    return getBoolean(USERNAMES, false);
   }
 
   /** Whether or not we use the attachments v3 form. */
@@ -240,34 +192,53 @@ public final class FeatureFlags {
     return getBoolean(REMOTE_DELETE, false);
   }
 
-  /** Whether or not profile sharing is required for calling */
-  public static boolean profileForCalling() {
-    return messageRequests() && getBoolean(PROFILE_FOR_CALLING, false);
-  }
-
-  /** Whether or not to display Calling PIP */
-  public static boolean callingPip() {
-    return getBoolean(CALLING_PIP, false);
-  }
-
-  /** New group UI elements. */
-  public static boolean newGroupUI() {
-    return getBoolean(NEW_GROUP_UI, false);
-  }
-
-  /** React with Any Emoji */
-  public static boolean reactWithAnyEmoji() {
-    return getBoolean(REACT_WITH_ANY_EMOJI, false);
-  }
-
   /** Groups v2 send and receive. */
   public static boolean groupsV2() {
-    return org.whispersystems.signalservice.FeatureFlags.ZK_GROUPS && getBoolean(GROUPS_V2, false);
+    return groupsV2OlderStickyFlags() || groupsV2LatestFlag();
   }
 
-  /** Groups v2 send and receive. */
+  /** Attempt groups v2 creation. */
   public static boolean groupsV2create() {
-    return groupsV2() && getBoolean(GROUPS_V2_CREATE, false);
+    return groupsV2LatestFlag() &&
+           getBoolean(GROUPS_V2_CREATE, false) &&
+           !SignalStore.internalValues().gv2DoNotCreateGv2Groups();
+  }
+
+  private static boolean groupsV2LatestFlag() {
+    return getBoolean(GROUPS_V2, false);
+  }
+
+  /** Clients that previously saw these flags as true must continue to respect that */
+  private static boolean groupsV2OlderStickyFlags() {
+    return getBoolean(GROUPS_V2_OLD_1, false) ||
+           getBoolean(GROUPS_V2_OLD_2, false);
+  }
+
+  /**
+   * Maximum number of members allowed in a group.
+   */
+  public static int gv2GroupCapacity() {
+    return getInteger(GROUPS_V2_CAPACITY, 151);
+  }
+
+  /** Internal testing extensions. */
+  public static boolean internalUser() {
+    return getBoolean(INTERNAL_USER, false);
+  }
+
+  /** Whether or not to use the new contact discovery service endpoint, which supports UUIDs. */
+  public static boolean cds() {
+    return getBoolean(CDS, false);
+  }
+
+  /** Whether or not we allow mentions send support in groups. */
+  public static boolean mentions() {
+    return getBoolean(MENTIONS, false);
+  }
+
+  /** Whether or not to use the UUID in verification codes. */
+  public static boolean verifyV2() {
+    return getBoolean(VERIFY_V2, false);
   }
 
   /** Only for rendering debug info. */
@@ -504,10 +475,4 @@ public final class FeatureFlags {
   enum Change {
     ENABLED, DISABLED, CHANGED, REMOVED
   }
-
-  /** Read and write versioned profile information. */
-  public static final boolean VERSIONED_PROFILES = org.whispersystems.signalservice.FeatureFlags.VERSIONED_PROFILES;
-
-  /** Enabled ZKGroups library. */
-  public static final boolean ZK_GROUPS = org.whispersystems.signalservice.FeatureFlags.ZK_GROUPS;
 }

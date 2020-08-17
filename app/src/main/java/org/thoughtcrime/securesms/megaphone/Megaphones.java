@@ -21,16 +21,13 @@ import org.thoughtcrime.securesms.lock.v2.KbsMigrationActivity;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.messagerequests.MessageRequestMegaphoneActivity;
 import org.thoughtcrime.securesms.profiles.ProfileName;
-import org.thoughtcrime.securesms.profiles.edit.EditProfileActivity;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.thoughtcrime.securesms.util.AvatarUtil;
 import org.thoughtcrime.securesms.util.FeatureFlags;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Creating a new megaphone:
@@ -49,10 +46,8 @@ public final class Megaphones {
 
   private static final String TAG = Log.tag(Megaphones.class);
 
-  private static final MegaphoneSchedule ALWAYS         = new ForeverSchedule(true);
-  private static final MegaphoneSchedule NEVER          = new ForeverSchedule(false);
-
-  static final MegaphoneSchedule EVERY_TWO_DAYS = new RecurringSchedule(TimeUnit.DAYS.toMillis(2));
+  private static final MegaphoneSchedule ALWAYS = new ForeverSchedule(true);
+  private static final MegaphoneSchedule NEVER  = new ForeverSchedule(false);
 
   private Megaphones() {}
 
@@ -93,9 +88,10 @@ public final class Megaphones {
     return new LinkedHashMap<Event, MegaphoneSchedule>() {{
       put(Event.REACTIONS, ALWAYS);
       put(Event.PINS_FOR_ALL, new PinsForAllSchedule());
-      put(Event.PROFILE_NAMES_FOR_ALL, FeatureFlags.profileNamesMegaphone() ? EVERY_TWO_DAYS : NEVER);
       put(Event.PIN_REMINDER, new SignalPinReminderSchedule());
       put(Event.MESSAGE_REQUESTS, shouldShowMessageRequestsMegaphone() ? ALWAYS : NEVER);
+      put(Event.MENTIONS, shouldShowMentionsMegaphone() ? ALWAYS : NEVER);
+      put(Event.LINK_PREVIEWS, SignalStore.settings().isLinkPreviewsEnabled() ? NEVER : ALWAYS);
     }};
   }
 
@@ -107,10 +103,12 @@ public final class Megaphones {
         return buildPinsForAllMegaphone(record);
       case PIN_REMINDER:
         return buildPinReminderMegaphone(context);
-      case PROFILE_NAMES_FOR_ALL:
-        return buildProfileNamesMegaphone(context);
       case MESSAGE_REQUESTS:
         return buildMessageRequestsMegaphone(context);
+      case MENTIONS:
+        return buildMentionsMegaphone();
+      case LINK_PREVIEWS:
+        return buildLinkPreviewsMegaphone();
       default:
         throw new IllegalArgumentException("Event not handled!");
     }
@@ -148,6 +146,7 @@ public final class Megaphones {
     }
   }
 
+  @SuppressWarnings("CodeBlock2Expr")
   private static @NonNull Megaphone buildPinReminderMegaphone(@NonNull Context context) {
     return new Megaphone.Builder(Event.PIN_REMINDER, Megaphone.Style.BASIC)
                         .setTitle(R.string.Megaphones_verify_your_signal_pin)
@@ -164,12 +163,12 @@ public final class Megaphones {
                             }
 
                             @Override
-                            public void onReminderCompleted(boolean includedFailure) {
+                            public void onReminderCompleted(@NonNull String pin, boolean includedFailure) {
                               Log.i(TAG, "[PinReminder] onReminderCompleted(" + includedFailure + ")");
                               if (includedFailure) {
-                                SignalStore.pinValues().onEntrySuccessWithWrongGuess();
+                                SignalStore.pinValues().onEntrySuccessWithWrongGuess(pin);
                               } else {
-                                SignalStore.pinValues().onEntrySuccess();
+                                SignalStore.pinValues().onEntrySuccess(pin);
                               }
 
                               controller.onMegaphoneSnooze(Event.PIN_REMINDER);
@@ -180,34 +179,7 @@ public final class Megaphones {
                         .build();
   }
 
-  private static @NonNull Megaphone buildProfileNamesMegaphone(@NonNull Context context) {
-    short requestCode  = Recipient.self().getProfileName() != ProfileName.EMPTY
-                         ? ConversationListFragment.PROFILE_NAMES_REQUEST_CODE_CONFIRM_NAME
-                         : ConversationListFragment.PROFILE_NAMES_REQUEST_CODE_CREATE_NAME;
-
-    Megaphone.Builder builder = new Megaphone.Builder(Event.PROFILE_NAMES_FOR_ALL, Megaphone.Style.BASIC)
-                                             .enableSnooze(null)
-                                             .setImageRequest(AvatarUtil.getSelfAvatarOrFallbackIcon(context, R.drawable.ic_profilename_64));
-
-    if (Recipient.self().getProfileName() == ProfileName.EMPTY) {
-      return builder.setTitle(R.string.ProfileNamesMegaphone__add_a_profile_name)
-                    .setBody(R.string.ProfileNamesMegaphone__this_will_be_displayed_when_you_start)
-                    .setActionButton(R.string.ProfileNamesMegaphone__add_profile_name, (megaphone, listener) -> {
-                      listener.onMegaphoneSnooze(Event.PROFILE_NAMES_FOR_ALL);
-                      listener.onMegaphoneNavigationRequested(new Intent(context, EditProfileActivity.class), requestCode);
-                    })
-                    .build();
-    } else {
-      return builder.setTitle(R.string.ProfileNamesMegaphone__confirm_your_profile_name)
-                    .setBody(R.string.ProfileNamesMegaphone__your_profile_can_now_include)
-                    .setActionButton(R.string.ProfileNamesMegaphone__confirm_name, (megaphone, listener) -> {
-                      listener.onMegaphoneCompleted(Event.PROFILE_NAMES_FOR_ALL);
-                      listener.onMegaphoneNavigationRequested(new Intent(context, EditProfileActivity.class), requestCode);
-                    })
-                    .build();
-    }
-  }
-
+  @SuppressWarnings("CodeBlock2Expr")
   private static @NonNull Megaphone buildMessageRequestsMegaphone(@NonNull Context context) {
     return new Megaphone.Builder(Event.MESSAGE_REQUESTS, Megaphone.Style.FULLSCREEN)
                         .disableSnooze()
@@ -219,17 +191,35 @@ public final class Megaphones {
                         .build();
   }
 
+  private static Megaphone buildMentionsMegaphone() {
+    return new Megaphone.Builder(Event.MENTIONS, Megaphone.Style.POPUP)
+                        .setTitle(R.string.MentionsMegaphone__introducing_mentions)
+                        .setBody(R.string.MentionsMegaphone__get_someones_attention_in_a_group_by_typing)
+                        .setImage(R.drawable.mention_megaphone)
+                        .build();
+  }
+
+  private static @NonNull Megaphone buildLinkPreviewsMegaphone() {
+    return new Megaphone.Builder(Event.LINK_PREVIEWS, Megaphone.Style.LINK_PREVIEWS)
+                        .setMandatory(true)
+                        .build();
+  }
+
   private static boolean shouldShowMessageRequestsMegaphone() {
-    boolean userHasAProfileName = Recipient.self().getProfileName() != ProfileName.EMPTY;
-    return FeatureFlags.messageRequests() && !userHasAProfileName;
+    return Recipient.self().getProfileName() == ProfileName.EMPTY;
+  }
+
+  private static boolean shouldShowMentionsMegaphone() {
+    return FeatureFlags.mentions() && FeatureFlags.groupsV2();
   }
 
   public enum Event {
     REACTIONS("reactions"),
     PINS_FOR_ALL("pins_for_all"),
     PIN_REMINDER("pin_reminder"),
-    PROFILE_NAMES_FOR_ALL("profile_names"),
-    MESSAGE_REQUESTS("message_requests");
+    MESSAGE_REQUESTS("message_requests"),
+    MENTIONS("mentions"),
+    LINK_PREVIEWS("link_previews");
 
     private final String key;
 

@@ -101,15 +101,8 @@ public class MessageSender {
     Recipient   recipient   = message.getRecipient();
     boolean     keyExchange = message.isKeyExchange();
 
-    long allocatedThreadId;
-
-    if (threadId == -1) {
-      allocatedThreadId = DatabaseFactory.getThreadDatabase(context).getThreadIdFor(recipient);
-    } else {
-      allocatedThreadId = threadId;
-    }
-
-    long messageId = database.insertMessageOutbox(allocatedThreadId, message, forceSms, System.currentTimeMillis(), insertListener);
+    long allocatedThreadId = DatabaseFactory.getThreadDatabase(context).getOrCreateValidThreadId(recipient, threadId);
+    long messageId         = database.insertMessageOutbox(allocatedThreadId, message, forceSms, System.currentTimeMillis(), insertListener);
 
     sendTextMessage(context, recipient, forceSms, keyExchange, messageId);
     onMessageSent();
@@ -127,16 +120,9 @@ public class MessageSender {
       ThreadDatabase threadDatabase = DatabaseFactory.getThreadDatabase(context);
       MmsDatabase    database       = DatabaseFactory.getMmsDatabase(context);
 
-      long allocatedThreadId;
-
-      if (threadId == -1) {
-        allocatedThreadId = threadDatabase.getThreadIdFor(message.getRecipient(), message.getDistributionType());
-      } else {
-        allocatedThreadId = threadId;
-      }
-
-      Recipient recipient = message.getRecipient();
-      long      messageId = database.insertMessageOutbox(message, allocatedThreadId, forceSms, insertListener);
+      long      allocatedThreadId = threadDatabase.getOrCreateValidThreadId(message.getRecipient(), threadId, message.getDistributionType());
+      Recipient recipient         = message.getRecipient();
+      long      messageId         = database.insertMessageOutbox(message, allocatedThreadId, forceSms, insertListener);
 
       sendMediaMessage(context, recipient, forceSms, messageId, Collections.emptyList());
       onMessageSent();
@@ -251,9 +237,9 @@ public class MessageSender {
         if (isLocalSelfSend(context, recipient, false)) {
           sendLocalMediaSelf(context, messageId);
         } else if (isGroupPushSend(recipient)) {
-          jobManager.add(new PushGroupSendJob(messageId, recipient.getId(), null), messageDependsOnIds);
+          jobManager.add(new PushGroupSendJob(messageId, recipient.getId(), null, true), messageDependsOnIds, recipient.getId().toQueueKey());
         } else {
-          jobManager.add(new PushMediaSendJob(messageId, recipient), messageDependsOnIds);
+          jobManager.add(new PushMediaSendJob(messageId, recipient), messageDependsOnIds, recipient.getId().toQueueKey());
         }
       }
 
@@ -332,7 +318,7 @@ public class MessageSender {
       ApplicationDependencies.getJobManager().add(RemoteDeleteSendJob.create(context, messageId, isMms));
       onMessageSent();
     } catch (NoSuchMessageException e) {
-      Log.w(TAG, "[sendNewReaction] Could not find message! Ignoring.");
+      Log.w(TAG, "[sendRemoteDelete] Could not find message! Ignoring.");
     }
   }
 
@@ -407,8 +393,8 @@ public class MessageSender {
     JobManager jobManager = ApplicationDependencies.getJobManager();
 
     if (uploadJobIds.size() > 0) {
-      Job groupSend = new PushGroupSendJob(messageId, recipient.getId(), filterRecipientId);
-      jobManager.add(groupSend, uploadJobIds);
+      Job groupSend = new PushGroupSendJob(messageId, recipient.getId(), filterRecipientId, !uploadJobIds.isEmpty());
+      jobManager.add(groupSend, uploadJobIds, uploadJobIds.isEmpty() ? null : recipient.getId().toQueueKey());
     } else {
       PushGroupSendJob.enqueue(context, jobManager, messageId, recipient.getId(), filterRecipientId);
     }
@@ -516,7 +502,7 @@ public class MessageSender {
       ExpiringMessageManager expirationManager = ApplicationContext.getInstance(context).getExpiringMessageManager();
       SmsDatabase            smsDatabase       = DatabaseFactory.getSmsDatabase(context);
       MmsSmsDatabase         mmsSmsDatabase    = DatabaseFactory.getMmsSmsDatabase(context);
-      SmsMessageRecord       message           = smsDatabase.getMessage(messageId);
+      SmsMessageRecord       message           = smsDatabase.getMessageRecord(messageId);
       SyncMessageId          syncId            = new SyncMessageId(Recipient.self().getId(), message.getDateSent());
 
       smsDatabase.markAsSent(messageId, true);

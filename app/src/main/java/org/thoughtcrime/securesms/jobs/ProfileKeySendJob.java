@@ -124,7 +124,7 @@ public class ProfileKeySendJob extends BaseJob {
 
   private List<Recipient> deliver(@NonNull Recipient conversationRecipient, @NonNull List<Recipient> destinations) throws IOException, UntrustedIdentityException {
     SignalServiceMessageSender             messageSender      = ApplicationDependencies.getSignalServiceMessageSender();
-    List<SignalServiceAddress>             addresses          = Stream.of(destinations).map(t -> RecipientUtil.toSignalServiceAddress(context, t)).toList();
+    List<SignalServiceAddress>             addresses          = RecipientUtil.toSignalServiceAddressesFromResolved(context, destinations);
     List<Optional<UnidentifiedAccessPair>> unidentifiedAccess = Stream.of(destinations).map(recipient -> UnidentifiedAccessUtil.getAccessFor(context, recipient)).toList();
     SignalServiceDataMessage.Builder       dataMessage        = SignalServiceDataMessage.newBuilder()
                                                                                         .asProfileKeyUpdate(true)
@@ -137,24 +137,7 @@ public class ProfileKeySendJob extends BaseJob {
 
     List<SendMessageResult> results = messageSender.sendMessage(addresses, unidentifiedAccess, false, dataMessage.build());
 
-    Stream.of(results)
-          .filter(r -> r.getIdentityFailure() != null)
-          .map(SendMessageResult::getAddress)
-          .map(a -> Recipient.externalPush(context, a))
-          .forEach(r -> Log.w(TAG, "Identity failure for " + r.getId()));
-
-    Stream.of(results)
-          .filter(SendMessageResult::isUnregisteredFailure)
-          .map(SendMessageResult::getAddress)
-          .map(a -> Recipient.externalPush(context, a))
-          .forEach(r -> Log.w(TAG, "Unregistered failure for " + r.getId()));
-
-
-    return Stream.of(results)
-                 .filter(r -> r.getSuccess() != null || r.getIdentityFailure() != null || r.isUnregisteredFailure())
-                 .map(SendMessageResult::getAddress)
-                 .map(a -> Recipient.externalPush(context, a))
-                 .toList();
+    return GroupSendJobHelper.getCompletedSends(context, results);
   }
 
   public static class Factory implements Job.Factory<ProfileKeySendJob> {

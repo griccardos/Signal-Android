@@ -43,7 +43,7 @@ import org.whispersystems.libsignal.util.guava.Optional;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
-public class InviteActivity extends PassphraseRequiredActionBarActivity implements ContactSelectionListFragment.OnContactSelectedListener {
+public class InviteActivity extends PassphraseRequiredActivity implements ContactSelectionListFragment.OnContactSelectedListener {
 
   private ContactSelectionListFragment contactsFragment;
   private EditText                     inviteText;
@@ -121,8 +121,9 @@ public class InviteActivity extends PassphraseRequiredActionBarActivity implemen
   }
 
   @Override
-  public void onContactSelected(Optional<RecipientId> recipientId, String number) {
+  public boolean onContactSelected(Optional<RecipientId> recipientId, String number) {
     updateSmsButtonText();
+    return true;
   }
 
   @Override

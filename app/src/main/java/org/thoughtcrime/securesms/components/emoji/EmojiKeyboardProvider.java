@@ -12,6 +12,7 @@ import android.widget.ImageView;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.emoji.EmojiPageViewGridAdapter.VariationSelectorListener;
+import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 import org.thoughtcrime.securesms.util.ResUtil;
 import org.thoughtcrime.securesms.util.ThemeUtil;
@@ -29,6 +30,8 @@ public class EmojiKeyboardProvider implements MediaKeyboardProvider,
 {
   private static final KeyEvent DELETE_KEY_EVENT = new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL);
 
+  private static final String RECENT_STORAGE_KEY = "pref_recent_emoji2";
+
   private final Context              context;
   private final List<EmojiPageModel> models;
   private final RecentEmojiPageModel recentModel;
@@ -41,11 +44,12 @@ public class EmojiKeyboardProvider implements MediaKeyboardProvider,
     this.context            = context;
     this.emojiEventListener = emojiEventListener;
     this.models             = new LinkedList<>();
-    this.recentModel        = new RecentEmojiPageModel(context);
+    this.recentModel        = new RecentEmojiPageModel(context, RECENT_STORAGE_KEY);
     this.emojiPagerAdapter  = new EmojiPagerAdapter(context, models, new EmojiEventListener() {
       @Override
       public void onEmojiSelected(String emoji) {
         recentModel.onCodePointSelected(emoji);
+        SignalStore.emojiValues().setPreferredVariation(emoji);
 
         if (emojiEventListener != null) {
           emojiEventListener.onEmojiSelected(emoji);
