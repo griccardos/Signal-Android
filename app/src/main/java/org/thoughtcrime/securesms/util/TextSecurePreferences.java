@@ -419,10 +419,6 @@ public class TextSecurePreferences {
     setBooleanPreference(context, TYPING_INDICATORS, enabled);
   }
 
-  public static boolean isLinkPreviewsEnabled(Context context) {
-    return getBooleanPreference(context, LINK_PREVIEWS, true);
-  }
-
   public static void setLinkPreviewsEnabled(Context context, boolean enabled) {
     setBooleanPreference(context, LINK_PREVIEWS, enabled);
   }
@@ -490,6 +486,10 @@ public class TextSecurePreferences {
 
   public static NotificationPrivacyPreference getNotificationPrivacy(Context context) {
     return new NotificationPrivacyPreference(getStringPreference(context, NOTIFICATION_PRIVACY_PREF, "all"));
+  }
+
+  public static void setNewContactsNotificationEnabled(Context context, boolean isEnabled) {
+    setBooleanPreference(context, NEW_CONTACTS_NOTIFICATIONS, isEnabled);
   }
 
   public static boolean isNewContactsNotificationEnabled(Context context) {

@@ -21,9 +21,9 @@ import net.sqlcipher.database.SQLiteDatabase;
 import net.sqlcipher.database.SQLiteDatabaseHook;
 import net.sqlcipher.database.SQLiteOpenHelper;
 
-import org.thoughtcrime.securesms.color.MaterialColor;
-import org.thoughtcrime.securesms.contacts.avatars.ContactColors;
 import org.thoughtcrime.securesms.contacts.avatars.ContactColorsLegacy;
+import org.thoughtcrime.securesms.database.MentionDatabase;
+import org.thoughtcrime.securesms.database.RemappedRecordsDatabase;
 import org.thoughtcrime.securesms.profiles.AvatarHelper;
 import org.thoughtcrime.securesms.profiles.ProfileName;
 import org.thoughtcrime.securesms.recipients.RecipientId;
@@ -134,8 +134,17 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
   private static final int SERVER_TIMESTAMP                 = 59;
   private static final int REMOTE_DELETE                    = 60;
   private static final int COLOR_MIGRATION                  = 61;
+  private static final int LAST_SCROLLED                    = 62;
+  private static final int LAST_PROFILE_FETCH               = 63;
+  private static final int SERVER_DELIVERED_TIMESTAMP       = 64;
+  private static final int QUOTE_CLEANUP                    = 65;
+  private static final int BORDERLESS                       = 66;
+  private static final int REMAPPED_RECORDS                 = 67;
+  private static final int MENTIONS                         = 68;
+  private static final int PINNED_CONVERSATIONS             = 69;
+  private static final int MENTION_GLOBAL_SETTING_MIGRATION = 70;
 
-  private static final int    DATABASE_VERSION = 61;
+  private static final int    DATABASE_VERSION = 70;
   private static final String DATABASE_NAME    = "signal.db";
 
   private final Context        context;
@@ -179,8 +188,10 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
     db.execSQL(StorageKeyDatabase.CREATE_TABLE);
     db.execSQL(KeyValueDatabase.CREATE_TABLE);
     db.execSQL(MegaphoneDatabase.CREATE_TABLE);
+    db.execSQL(MentionDatabase.CREATE_TABLE);
     executeStatements(db, SearchDatabase.CREATE_TABLE);
     executeStatements(db, JobDatabase.CREATE_TABLE);
+    executeStatements(db, RemappedRecordsDatabase.CREATE_TABLE);
 
     executeStatements(db, RecipientDatabase.CREATE_INDEXS);
     executeStatements(db, SmsDatabase.CREATE_INDEXS);
@@ -192,6 +203,7 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
     executeStatements(db, GroupReceiptDatabase.CREATE_INDEXES);
     executeStatements(db, StickerDatabase.CREATE_INDEXES);
     executeStatements(db, StorageKeyDatabase.CREATE_INDEXES);
+    executeStatements(db, MentionDatabase.CREATE_INDEXES);
 
     if (context.getDatabasePath(ClassicOpenHelper.NAME).exists()) {
       ClassicOpenHelper                      legacyHelper = new ClassicOpenHelper(context);
@@ -904,6 +916,96 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
             db.update("recipient", values, "_id = ?", new String[] { String.valueOf(id) });
           }
         }
+      }
+
+      if (oldVersion < LAST_SCROLLED) {
+        db.execSQL("ALTER TABLE thread ADD COLUMN last_scrolled INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < LAST_PROFILE_FETCH) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN last_profile_fetch INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < SERVER_DELIVERED_TIMESTAMP) {
+        db.execSQL("ALTER TABLE push ADD COLUMN server_delivered_timestamp INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < QUOTE_CLEANUP) {
+        String query = "SELECT _data " +
+                       "FROM (SELECT _data, MIN(quote) AS all_quotes " +
+                             "FROM part " +
+                             "WHERE _data NOT NULL AND data_hash NOT NULL " +
+                             "GROUP BY _data) " +
+                       "WHERE all_quotes = 1";
+
+        int count = 0;
+
+        try (Cursor cursor = db.rawQuery(query, null)) {
+          while (cursor != null && cursor.moveToNext()) {
+            String data = cursor.getString(cursor.getColumnIndexOrThrow("_data"));
+
+            if (new File(data).delete()) {
+              ContentValues values = new ContentValues();
+              values.putNull("_data");
+              values.putNull("data_random");
+              values.putNull("thumbnail");
+              values.putNull("thumbnail_random");
+              values.putNull("data_hash");
+              db.update("part", values, "_data = ?", new String[] { data });
+
+              count++;
+            } else {
+              Log.w(TAG, "[QuoteCleanup] Failed to delete " + data);
+            }
+          }
+        }
+
+        Log.i(TAG, "[QuoteCleanup] Cleaned up " + count + " quotes.");
+      }
+
+      if (oldVersion < BORDERLESS) {
+        db.execSQL("ALTER TABLE part ADD COLUMN borderless INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < REMAPPED_RECORDS) {
+        db.execSQL("CREATE TABLE remapped_recipients (_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                                                     "old_id INTEGER UNIQUE, " +
+                                                     "new_id INTEGER)");
+        db.execSQL("CREATE TABLE remapped_threads (_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                                                  "old_id INTEGER UNIQUE, " +
+                                                  "new_id INTEGER)");
+      }
+
+      if (oldVersion < MENTIONS) {
+        db.execSQL("CREATE TABLE mention (_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                                         "thread_id INTEGER, " +
+                                         "message_id INTEGER, " +
+                                         "recipient_id INTEGER, " +
+                                         "range_start INTEGER, " +
+                                         "range_length INTEGER)");
+
+        db.execSQL("CREATE INDEX IF NOT EXISTS mention_message_id_index ON mention (message_id)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS mention_recipient_id_thread_id_index ON mention (recipient_id, thread_id);");
+
+        db.execSQL("ALTER TABLE mms ADD COLUMN quote_mentions BLOB DEFAULT NULL");
+        db.execSQL("ALTER TABLE mms ADD COLUMN mentions_self INTEGER DEFAULT 0");
+
+        db.execSQL("ALTER TABLE recipient ADD COLUMN mention_setting INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < PINNED_CONVERSATIONS) {
+        db.execSQL("ALTER TABLE thread ADD COLUMN pinned INTEGER DEFAULT 0");
+        db.execSQL("CREATE INDEX IF NOT EXISTS thread_pinned_index ON thread (pinned)");
+      }
+
+      if (oldVersion < MENTION_GLOBAL_SETTING_MIGRATION) {
+        ContentValues updateAlways = new ContentValues();
+        updateAlways.put("mention_setting", 0);
+        db.update("recipient", updateAlways, "mention_setting = 1", null);
+
+        ContentValues updateNever = new ContentValues();
+        updateNever.put("mention_setting", 1);
+        db.update("recipient", updateNever, "mention_setting = 2", null);
       }
 
       db.setTransactionSuccessful();

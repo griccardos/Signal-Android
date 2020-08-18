@@ -34,6 +34,7 @@
     <dimen name="message_bubble_shadow_distance">1.5dp</dimen>
     <dimen name="message_bubble_horizontal_padding">12dp</dimen>
     <dimen name="message_bubble_top_padding">6dp</dimen>
+    <dimen name="message_bubble_top_padding_audio">12dp</dimen>
     <dimen name="message_bubble_collapsed_footer_padding">6dp</dimen>
     <dimen name="message_bubble_edge_margin">32dp</dimen>
     <dimen name="message_bubble_bottom_padding">8dp</dimen>
@@ -45,12 +46,7 @@
     <dimen name="media_bubble_min_height">100dp</dimen>
     <dimen name="media_bubble_max_height">320dp</dimen>
     <dimen name="media_bubble_sticker_dimens">175dp</dimen>
-
-    <dimen name="reactions_bubble_margin">-37dp</dimen>
-    <dimen name="reactions_bubble_size">32dp</dimen>
-    <dimen name="reactions_bubble_text_size">16dp</dimen>
-    <dimen name="reactions_bubble_margin_max">28dp</dimen>
-    <dimen name="reactions_bubble_container_max_height">60dp</dimen>
+    <dimen name="message_audio_width">210dp</dimen>
 
     <dimen name="media_picker_folder_width">175dp</dimen>
     <dimen name="media_picker_item_width">85dp</dimen>
@@ -82,8 +78,10 @@
     <dimen name="quote_corner_radius_preview">18dp</dimen>
     <dimen name="quote_thumb_size">60dp</dimen>
 
+    <dimen name="mention_corner_radius">4dp</dimen>
+
     <integer name="media_overview_cols">3</integer>
-    <dimen name="message_details_table_row_pad">10dp</dimen>
+    <dimen name="message_details_table_row_pad">8dp</dimen>
 
     <dimen name="sticker_page_item_padding">8dp</dimen>
     <dimen name="sticker_page_item_divisor">88dp</dimen>
@@ -126,9 +124,6 @@
          holding the phone, *before* moving it up to your face and having
          the prox sensor kick in.) -->
 
-    <dimen name="onboarding_title_size">34sp</dimen>
-    <dimen name="onboarding_subtitle_size">20sp</dimen>
-
     <dimen name="floating_action_button_margin">16dp</dimen>
 
     <dimen name="alertview_small_icon_size">14dp</dimen>
@@ -157,9 +152,11 @@
     <dimen name="picture_in_picture_gesture_helper_pip_height">160dp</dimen>
 
     <dimen name="react_with_any_emoji_bottom_sheet_dialog_fragment_min_height">340dp</dimen>
-    <dimen name="react_with_any_emoji_bottom_sheet_dialog_fragment_tabs_height">36dp</dimen>
+    <dimen name="react_with_any_emoji_bottom_sheet_dialog_fragment_tabs_height">40dp</dimen>
 
     <dimen name="group_manage_fragment_card_vertical_padding">12dp</dimen>
     <dimen name="group_manage_fragment_row_height">52dp</dimen>
     <dimen name="group_manage_fragment_row_horizontal_padding">16dp</dimen>
+
+    <dimen name="wave_form_bar_width">2dp</dimen>
 </resources>

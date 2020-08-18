@@ -23,6 +23,8 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.attachments.Attachment;
+import org.thoughtcrime.securesms.components.mention.MentionAnnotation;
+import org.thoughtcrime.securesms.database.model.Mention;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader.DecryptableUri;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 import org.thoughtcrime.securesms.mms.Slide;
@@ -55,7 +57,7 @@ public class QuoteView extends FrameLayout implements RecipientForeverObserver {
 
   private long          id;
   private LiveRecipient author;
-  private String        body;
+  private CharSequence  body;
   private TextView      mediaDescriptionText;
   private TextView      missingLinkText;
   private SlideDeck     attachments;
@@ -147,7 +149,7 @@ public class QuoteView extends FrameLayout implements RecipientForeverObserver {
   public void setQuote(GlideRequests glideRequests,
                        long id,
                        @NonNull Recipient author,
-                       @Nullable String body,
+                       @Nullable CharSequence body,
                        boolean originalMissing,
                        @NonNull SlideDeck attachments)
   {
@@ -189,14 +191,14 @@ public class QuoteView extends FrameLayout implements RecipientForeverObserver {
     boolean outgoing = messageType != MESSAGE_TYPE_INCOMING;
 
     authorView.setText(author.isLocalNumber() ? getContext().getString(R.string.QuoteView_you)
-                                              : author.toShortString(getContext()));
+                                              : author.getDisplayName(getContext()));
 
     // We use the raw color resource because Android 4.x was struggling with tints here
     quoteBarView.setImageResource(author.getColor().toQuoteBarColorResource(getContext(), outgoing));
     mainView.setBackgroundColor(author.getColor().toQuoteBackgroundColor(getContext(), outgoing));
   }
 
-  private void setQuoteText(@Nullable String body, @NonNull SlideDeck attachments) {
+  private void setQuoteText(@Nullable CharSequence body, @NonNull SlideDeck attachments) {
     if (!TextUtils.isEmpty(body) || !attachments.containsMediaSlide()) {
       bodyView.setVisibility(VISIBLE);
       bodyView.setText(body == null ? "" : body);
@@ -280,11 +282,15 @@ public class QuoteView extends FrameLayout implements RecipientForeverObserver {
     return author.get();
   }
 
-  public String getBody() {
+  public CharSequence getBody() {
     return body;
   }
 
   public List<Attachment> getAttachments() {
     return attachments.asAttachments();
+  }
+
+  public @NonNull List<Mention> getMentions() {
+    return MentionAnnotation.getMentionsFromAnnotations(body);
   }
 }

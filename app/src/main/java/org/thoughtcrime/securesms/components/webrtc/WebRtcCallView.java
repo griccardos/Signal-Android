@@ -196,10 +196,6 @@ public class WebRtcCallView extends FrameLayout {
     micToggle.setChecked(isMicEnabled, false);
   }
 
-  public void setAudioOutput(WebRtcAudioOutput output) {
-    audioToggle.setAudioOutput(output);
-  }
-
   public void setRemoteVideoEnabled(boolean isRemoteVideoEnabled) {
     if (isRemoteVideoEnabled) {
       remoteRenderContainer.setVisibility(View.VISIBLE);
@@ -290,6 +286,7 @@ public class WebRtcCallView extends FrameLayout {
   public void setStatusFromHangupType(@NonNull HangupMessage.Type hangupType) {
     switch (hangupType) {
       case NORMAL:
+      case NEED_PERMISSION:
         status.setText(R.string.RedPhone_ending_call);
         break;
       case ACCEPTED:
@@ -310,7 +307,10 @@ public class WebRtcCallView extends FrameLayout {
     Set<View> lastVisibleSet = new HashSet<>(visibleViewSet);
 
     visibleViewSet.clear();
-    visibleViewSet.addAll(topViews);
+
+    if (webRtcControls.displayTopViews()) {
+      visibleViewSet.addAll(topViews);
+    }
 
     if (webRtcControls.displayIncomingCallButtons()) {
       visibleViewSet.addAll(incomingCallViews);
@@ -333,7 +333,7 @@ public class WebRtcCallView extends FrameLayout {
       audioToggle.setControlAvailability(webRtcControls.enableHandsetInAudioToggle(),
                                          webRtcControls.enableHeadsetInAudioToggle());
 
-      audioToggle.setAudioOutput(webRtcControls.getAudioOutput());
+      audioToggle.setAudioOutput(webRtcControls.getAudioOutput(), false);
     }
 
     if (webRtcControls.displayCameraToggle()) {

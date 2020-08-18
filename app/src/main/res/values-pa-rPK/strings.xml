@@ -44,6 +44,7 @@
   <string name="ApplicationPreferencesActivity_privacy_summary">اسکرین لاک %1$s، رجسٹریشن لاک %2$s</string>
   <string name="ApplicationPreferencesActivity_privacy_summary_screen_lock">سکریں لاک %1$s</string>
   <string name="ApplicationPreferencesActivity_appearance_summary">تھیم %1$s، زبان %2$s</string>
+  <string name="ApplicationPreferencesActivity_pin_created">پن بن گیا اے۔</string>
   <!--AppProtectionPreferenceFragment-->
   <plurals name="AppProtectionPreferenceFragment_minutes">
     <item quantity="one">%d منٹمنٹ</item>
@@ -78,7 +79,6 @@
   <string name="BlockedContactsActivity_blocked_contacts"> بلاک کیتے گئے رابطے</string>
   <!--BlockUnblockDialog-->
   <string name="BlockUnblockDialog_group_members_will_be_able_to_add_you">گروپ اراکین تساں نوں ایس گروپ اچ دوبارہ شامل کرن دے اہل ہون گے۔</string>
-  <string name="BlockUnblockDialog_you_will_be_able_to_call_and_message_each_other">تساں اک دوجے نوں سنیہا گھلن تے کال کرن دے اہل ہوو گے۔</string>
   <string name="BlockUnblockDialog_unblock">ان بلاک کرو</string>
   <string name="BlockUnblockDialog_block">بلاک کرو</string>
   <string name="BlockUnblockDialog_block_and_delete">بلاک تے حذف کرو</string>
@@ -146,7 +146,6 @@
   <string name="ContactShareEditActivity_type_missing">دوجا</string>
   <string name="ContactShareEditActivity_invalid_contact">منتخب کیتا رابطہ ناقابل قبول سی</string>
   <!--ConversationItem-->
-  <string name="ConversationItem_error_not_delivered">گھلنا ناکام ہویا، تفصیلاں لئی بٹن دبو</string>
   <string name="ConversationItem_received_key_exchange_message_tap_to_process"> اچیچا تبادلہ سنیہا وصول ہویا اے، کارروائی کرن لئی بٹن دبو ۔</string>
   <string name="ConversationItem_group_action_left">%1$s نے گروپ چھڈ دتا اے۔</string>
   <string name="ConversationItem_click_to_approve_unencrypted">گھلنا ناکام ہویا، غیر محفوظ فال بیک لئی بٹن دبو </string>
@@ -178,11 +177,11 @@
   <string name="ConversationActivity_this_device_does_not_appear_to_support_dial_actions">ایہہ آلہ ڈائل کارروائیاں دی معاونت کردا وکھائی نئیں دیندا اے۔</string>
   <string name="ConversationActivity_leave_group">گروپ چھڈ دئی اے ؟</string>
   <string name="ConversationActivity_are_you_sure_you_want_to_leave_this_group">کیہ تسیں سچی مچی ایس گروپ نوں چھڈنا چاہندے او؟</string>
+  <string name="ConversationActivity_choose_new_admin">نواں ایڈمن منتخب کرو</string>
   <string name="ConversationActivity_transport_insecure_sms">غیر محفوظ SMS</string>
   <string name="ConversationActivity_transport_insecure_mms">غیر محفوظ MMS</string>
   <string name="ConversationActivity_transport_signal"> Signal </string>
   <string name="ConversationActivity_lets_switch_to_signal">آؤ Signal %1$s تے تبدیل کردئی اے</string>
-  <string name="ConversationActivity_error_leaving_group">گروپ چھڈن اچ نقص اے</string>
   <string name="ConversationActivity_specify_recipient">مہربانی کر کے اک رابطہ چنو </string>
   <string name="ConversationActivity_unblock_this_contact_question">ایس رابطے نوں ان بلاک کردئی اے ؟</string>
   <string name="ConversationActivity_unblock_this_group_question">ایس گروپ نوں ان بلاک کر دئی اے ؟</string>
@@ -259,7 +258,6 @@
   <string name="ConversationFragment_you_can_swipe_to_the_left_reply">فوری جواب دین لئی تسیں کسے وی سنیہے تے کھبے پاسے سوائپ کرسکدے او</string>
   <string name="ConversationFragment_outgoing_view_once_media_files_are_automatically_removed">باہر جان آلیاں اک واری ویکھیاں جان آلیاں میڈیا فائلاں گھلن توں بعد آپوں آپ مٹ جاندیاں نیں</string>
   <string name="ConversationFragment_you_already_viewed_this_message">تسیں ایہہ سنیہا پہلاں ای ویکھ چکے او</string>
-  <string name="ConversationFragment__you_can_add_notes_for_yourself_in_this_conversation">تساں ایس گل وات اچ اپنے لئے نوٹس شامل کر سکدے او۔ جے تساں دے اکاؤنٹ اچ کوئی لنک کیتے آلے ہون، تے نویں نوٹس نوں ہم آہنگ کیا جاوے گا۔</string>
   <!--ConversationListActivity-->
   <string name="ConversationListActivity_there_is_no_browser_installed_on_your_device">تہاڈے آلے تے کوئی براؤزر نصب نئیں اے۔</string>
   <!--ConversationListFragment-->
@@ -283,20 +281,20 @@
     <item quantity="one">گل بات ان باکس اچ منتقل کر دتی اے </item>
     <item quantity="other">%d گل باتاں ان باکس اچ منتقل کر دتیاں نیں </item>
   </plurals>
-  <string name="ConversationListFragment__your_profile_name_has_been_saved">تساں دا پروفائل نام محفوظ کر دتا گیا اے۔</string>
   <!--ConversationListItem-->
   <string name="ConversationListItem_key_exchange_message">کلیدی تبادلہ سنیہا</string>
   <!--ConversationListItemAction-->
   <string name="ConversationListItemAction_archived_conversations_d">آرکائیو کیتیاں گئیاں گل باتاں (%d)</string>
   <!--ConversationTitleView-->
   <string name="ConversationTitleView_verified">تصدیق کیتا ہویا</string>
+  <string name="ConversationTitleView_you">تساں</string>
+  <!--CreateGroupActivity-->
   <!--CreateProfileActivity-->
   <string name="CreateProfileActivity__profile">پروفائل</string>
   <string name="CreateProfileActivity_error_setting_profile_photo">پروفائل فوٹو ترتیب دین اچ نقص</string>
   <string name="CreateProfileActivity_problem_setting_profile">پروفائل ترتیب دین اچ مسئلہ</string>
   <string name="CreateProfileActivity_profile_photo">پروفائل فوٹو</string>
   <string name="CreateProfileActivity_set_up_your_profile">اپنا پروفائل ترتیب دیو</string>
-  <string name="CreateProfileActivity_signal_profiles_are_end_to_end_encrypted"> Signal پروفائلز پوری طراں خفیہ کاری کیتے ہوئے ہوندے نیں، تے Signal سروس کدی وی ایہناں معلومات تائیں رسائی حاصل نئیں کر دی اے۔</string>
   <string name="CreateProfileActivity_set_avatar_description">اواتار سیٹ کرو</string>
   <!--CustomDefaultPreference-->
   <string name="CustomDefaultPreference_using_custom">مخصوص ورت رئیا اے : %s</string>
@@ -344,22 +342,10 @@
   <!--GiphyFragmentPageAdapter-->
   <string name="GiphyFragmentPagerAdapter_gifs">GIFs</string>
   <string name="GiphyFragmentPagerAdapter_stickers">اسٹیکرز</string>
-  <!--GroupCreateActivity-->
-  <string name="GroupCreateActivity_actionbar_title">نواں گروپ</string>
-  <string name="GroupCreateActivity_actionbar_edit_title">گروپ اچ ترمیم کرو</string>
-  <string name="GroupCreateActivity_group_name_hint">گروپ دا ناں</string>
-  <string name="GroupCreateActivity_actionbar_mms_title">نواں MMS گروپ</string>
-  <string name="GroupCreateActivity_contacts_dont_support_push">تسیں اک رابطہ منتخب کیتا اے جیہڑا Signal گروپس دی معاونت نئیں کردا، ایس لئی ایہہ گروپ MMS ہووے گا۔</string>
-  <string name="GroupCreateActivity_youre_not_registered_for_signal">تسیں Signal سنیہے تے کالز لئی رجسٹر نئیں کیتا، ایس لئ Signal گروپ غیر فعال نیں۔ مہربانی کر کے ترتیباں تے ایڈوانسڈ اچ رجسٹر کرن دی کوشش کرو۔</string>
-  <string name="GroupCreateActivity_contacts_no_members">تہانوں اپنے گروپ اچ گھٹ توں گھٹ اک بددے دی لوڑھ اے!</string>
-  <string name="GroupCreateActivity_contacts_invalid_number">تہاڈے گروپ دے اراکین وچوں ایک دا نمبر صحیح طریقے نال نئیں پڑھیا جا سکدا۔ مہربانی کر کے ایس رابطے نوں ٹھیک کرو یاں ختم کرو تے فیر کوشش کرو۔</string>
-  <string name="GroupCreateActivity_avatar_content_description">گروپ اوتار</string>
-  <string name="GroupCreateActivity_menu_apply_button">درخواست کرو</string>
-  <string name="GroupCreateActivity_creating_group">%1$s تشکیل دے رئیا اے…</string>
-  <string name="GroupCreateActivity_updating_group">%1$s اپ ڈیٹ کر رئیا اے…</string>
-  <string name="GroupCreateActivity_cannot_add_non_push_to_existing_group">%1$s شامل نئیں کر سکیا کیوں جے اوہ Signal صارف نئیں۔</string>
-  <string name="GroupCreateActivity_loading_group_details">گروپ تفصیلاں لوڈ ہو ر‏ئیاں نیں…</string>
-  <string name="GroupCreateActivity_youre_already_in_the_group">تسیں پہلاں ای گروپ اچ او۔</string>
+  <!--AddToGroupActivity-->
+  <!--ChooseNewAdminActivity-->
+  <string name="ChooseNewAdminActivity_choose_new_admin">نواں ایڈمن منتخب کرو</string>
+  <string name="ChooseNewAdminActivity_done">ہو گیا</string>
   <!--GroupShareProfileView-->
   <string name="GroupShareProfileView_share_your_profile_name_and_photo_with_this_group">ایس گروپ نال تہاڈا پروفائل ناں تے تصویر سانچھی کر‏‏ئی اے دا؟</string>
   <string name="GroupShareProfileView_do_you_want_to_make_your_profile_name_and_photo_visible_to_all_current_and_future_members_of_this_group">کیہ تسیں ایس گروپ دے موجودہ تے آن آلیاں ممبراں نوں اپناں پروفائل ناں تے تصویر وکھانا چاہندے او؟</string>
@@ -367,33 +353,56 @@
   <!--GroupMembersDialog-->
   <string name="GroupMembersDialog_you">تسیں</string>
   <!--GV2 access levels-->
+  <!--GV2 invites sent-->
+  <string name="GroupManagement_learn_more">ہور جانو</string>
   <!--PendingMembersActivity-->
   <string name="PendingMembersActivity_people_you_invited">لوکی جیہڑے تساں نے مدعو کیتے</string>
   <string name="PendingMembersActivity_invites_by_other_group_members">دوجے گروپ دے رکناں دے ولوں دعوت نامے</string>
   <string name="PendingMembersActivity_missing_detail_explanation">دوجے گروپ رکناں دے ولوں مدعو کیتے لوکاں دی تفصیلاں نئیں وکھائی جاندی ہین۔ جے مدعو ہوئے لوک شمولیت کرن دا انتخاب کر دے ہین، تے ایس ویلے ایناں دی جانکاری دے گروپ دے نال سانجھا کیتا جاوے گا۔ جدوں تائیں اوہ گروپ اچ شمولیت نئیں کر دے اوہ کوئی سنیہے نئیں ویکھن گے۔</string>
+  <!--AddMembersActivity-->
+  <string name="AddMembersActivity__done">ہو گیا</string>
   <!--AddGroupDetailsFragment-->
   <string name="AddGroupDetailsFragment__create">بناؤ</string>
   <string name="AddGroupDetailsFragment__members">اراکین</string>
   <string name="AddGroupDetailsFragment__group_name_required">گروپ ناں (مطلوب اے)</string>
   <string name="AddGroupDetailsFragment__remove">ہٹاؤ</string>
+  <!--NonGv2MemberDialog-->
   <!--ManageGroupActivity-->
   <string name="ManageGroupActivity_disappearing_messages">غائب ہون آلے سنیہے</string>
+  <string name="ManageGroupActivity_add_members">ممبر شامل کرو</string>
   <string name="ManageGroupActivity_leave_group">گروپ چھڈو</string>
   <string name="ManageGroupActivity_mute_notifications">اطلاعواں خموش کرو</string>
   <string name="ManageGroupActivity_custom_notifications">حسب ضرورت اطلاعواں</string>
   <string name="ManageGroupActivity_off">آف</string>
   <string name="ManageGroupActivity_on">آن</string>
-  <string name="ManageGroupActivity_add_members">ممبر شامل کرو</string>
   <string name="ManageGroupActivity_view_all_members">سارے رکناں نوں ویکھو</string>
+  <string name="ManageGroupActivity_none">کوئی نئیں</string>
+  <!--GroupMentionSettingDialog-->
+  <!--ManageRecipientActivity-->
+  <string name="ManageRecipientActivity_disappearing_messages">غائب ہون آلے سنیہے</string>
+  <string name="ManageRecipientActivity_block">بلاک کرو</string>
+  <string name="ManageRecipientActivity_unblock">ان بلاک کرو</string>
+  <string name="ManageRecipientActivity_view_safety_number">سیفٹی نمبر ویکھو</string>
+  <string name="ManageRecipientActivity_mute_notifications">اطلاعواں خموش کرو</string>
+  <string name="ManageRecipientActivity_custom_notifications">حسب ضرورت اطلاعواں</string>
+  <string name="ManageRecipientActivity_off">آف</string>
+  <string name="ManageRecipientActivity_on">آن</string>
+  <string name="ManageRecipientActivity_message_description"> سنیہا</string>
   <!--CustomNotificationsDialogFragment-->
   <string name="CustomNotificationsDialogFragment__custom_notifications">حسب ضرورت اطلاعواں</string>
   <string name="CustomNotificationsDialogFragment__messages">سنیہے</string>
   <string name="CustomNotificationsDialogFragment__notification_sound"> اطلاع دی اواز</string>
   <string name="CustomNotificationsDialogFragment__vibrate">وائبریٹ</string>
-  <!--GV2 Invite cancellation confirmation-->
+  <string name="CustomNotificationsDialogFragment__call_settings">کال دیاں ترتیباں</string>
+  <string name="CustomNotificationsDialogFragment__ringtone">رنگ ٹون</string>
+  <string name="CustomNotificationsDialogFragment__enabled">فعال کیتا</string>
+  <string name="CustomNotificationsDialogFragment__disabled">غیرفعال کیتا</string>
+  <string name="CustomNotificationsDialogFragment__default">طے شدہ</string>
+  <!--GV2 Invite Revoke confirmation dialog-->
   <!--CropImageActivity-->
   <string name="CropImageActivity_group_avatar">گروپ اوتار</string>
   <string name="CropImageActivity_profile_avatar">اوتار</string>
+  <!--ImageEditorHud-->
   <!--InputPanel-->
   <string name="InputPanel_tap_and_hold_to_record_a_voice_message_release_to_send">اک صوتی سنیہا ریکارڈ کرن لئی بٹن دبو تے پھڑ کے رکھو، گھلن لئی چھڈ دیو</string>
   <!--InviteActivity-->
@@ -421,9 +430,6 @@
   <string name="Job_working_in_the_background">پس منظر اچ کم کرنا…</string>
   <!--LearnMoreTextView-->
   <string name="LearnMoreTextView_learn_more">ہور جانو</string>
-  <!--MessageDetailsRecipient-->
-  <string name="MessageDetailsRecipient_failed_to_send">گھلن اچ ناکام ہویا</string>
-  <string name="MessageDetailsRecipient_new_safety_number">نواں سیفٹی نمبر</string>
   <!--LongMessageActivity-->
   <string name="LongMessageActivity_unable_to_find_message"> سنیہا لبھ نئیں سکیا</string>
   <string name="LongMessageActivity_message_from_s">%1$s دا سنیہا</string>
@@ -531,6 +537,7 @@
   <string name="MessageRecord_s_disabled_disappearing_messages">%1$s نے غائب ہون آلے سنیہے غیر فعال کر دتے نیں۔</string>
   <string name="MessageRecord_you_set_disappearing_message_time_to_s">تسیں غائب ہون آلے سنیہے دا ویلا %1$s تے سیٹ کیتا اے۔</string>
   <string name="MessageRecord_s_set_disappearing_message_time_to_s">%1$s نے غائب ہون الے سنیہیاں دا ویلا %2$s تے سیٹ کیتا اے۔</string>
+  <!--Profile change updates-->
   <!--GV2 specific-->
   <string name="MessageRecord_you_created_the_group">تساں گروپ تخلیق کیتا۔</string>
   <string name="MessageRecord_group_updated">گروپ اپ ڈیٹ کیتا گیا۔</string>
@@ -539,7 +546,9 @@
   <string name="MessageRecord_s_joined_the_group">%1$s گروپ اچ شامل ہویا اے۔</string>
   <!--GV2 member removals-->
   <!--GV2 role change-->
+  <string name="MessageRecord_you_are_now_an_admin">ہونڑ تساں ایڈمن او۔</string>
   <!--GV2 invitations-->
+  <string name="MessageRecord_you_were_invited_to_the_group">تساں نوں گروپ اچ مدعو کیتا۔</string>
   <!--GV2 invitation revokes-->
   <!--GV2 invitation acceptance-->
   <!--GV2 title change-->
@@ -560,17 +569,12 @@
   <string name="MessageRequestProfileView_member_of_one_group">%1$s دا رکن</string>
   <string name="MessageRequestProfileView_member_of_two_groups">%1$s تے %2$s دا رکن</string>
   <string name="MessageRequestProfileView_member_of_many_groups">%1$s، %2$s، تے %3$s دا رکن</string>
-  <plurals name="MessageRequestProfileView_member_of_others">
-    <item quantity="one">%d دوجا</item>
-    <item quantity="other">%d دوجے</item>
-  </plurals>
   <!--PassphraseChangeActivity-->
   <string name="PassphraseChangeActivity_passphrases_dont_match_exclamation">پاس فریزز اکو جہے نئیں!</string>
   <string name="PassphraseChangeActivity_incorrect_old_passphrase_exclamation">پرانا پاس فریز غلط اے!</string>
   <string name="PassphraseChangeActivity_enter_new_passphrase_exclamation">نواں پاس فریز درج کرو!</string>
   <!--DeviceProvisioningActivity-->
   <string name="DeviceProvisioningActivity_link_this_device">ایس الے نوں توں منسلک کر دئی اے؟</string>
-  <string name="DeviceProvisioningActivity_cancel">منسوخ کرو</string>
   <string name="DeviceProvisioningActivity_continue">جاری رکھو</string>
   <string name="DeviceProvisioningActivity_content_intro">اے ایہدے قابل ہووے گا کہ</string>
   <string name="DeviceProvisioningActivity_content_bullets">
@@ -617,6 +621,7 @@
   <string name="PinRestoreEntryFragment_enter_numeric_pin">ہندسیاں تے مشتمل پن درج کرو</string>
   <!--PinRestoreLockedFragment-->
   <string name="PinRestoreLockedFragment_create_your_pin">آپناں پن بناوو</string>
+  <!--PinOptOutDialog-->
   <!--RatingManager-->
   <string name="RatingManager_rate_this_app">ایس ایپ دی درجہ بندی کرو</string>
   <string name="RatingManager_if_you_enjoy_using_this_app_please_take_a_moment"> جے تہانوں ایس ایپ دا استعمال چنگا لگدا اے، تے مہربانی کر کے اییس دی درجہ بندی کرکے ساڈی مدد کرن لئی تھوڑا جہا سمے دیو۔</string>
@@ -779,6 +784,12 @@
   <string name="ThreadRecord_you_marked_unverified">تسیں غیر تصدیق شدہ دے طور تے نشان زد کیتا اے</string>
   <string name="ThreadRecord_message_could_not_be_processed"> سنیہے تے کارروائی نئیں ہو سکی</string>
   <string name="ThreadRecord_message_request">سنیہا دی درخواست</string>
+  <string name="ThreadRecord_photo">تصویر</string>
+  <string name="ThreadRecord_gif">GIF</string>
+  <string name="ThreadRecord_voice_message">وائس سنیہا</string>
+  <string name="ThreadRecord_contact">رابطہ</string>
+  <string name="ThreadRecord_file">فائل</string>
+  <string name="ThreadRecord_video">ویڈیو</string>
   <!--UpdateApkReadyListener-->
   <string name="UpdateApkReadyListener_Signal_update">Signal اپ ڈیٹ</string>
   <string name="UpdateApkReadyListener_a_new_version_of_signal_is_available_tap_to_update">Signal دا اک نواں ورژن دستیاب اے، اپ ڈیٹ کرن لئی بٹن دبو </string>
@@ -804,7 +815,6 @@
   <string name="UsernameEditFragment_encountered_a_network_error">نیٹ ورک نقص دا سامنا کرنا پیا اے۔</string>
   <string name="UsernameEditFragment_this_username_is_taken"> ایہہ صارف ناں کسے نے پہلاں ای لیا ہویا اے۔</string>
   <string name="UsernameEditFragment_this_username_is_available"> ایہہ صارف ناں دستیاب اے۔</string>
-  <string name="UsernameEditFragment_usernames_can_only_include">صارف ناواں اچ صرف A-Z، 0-9، تے انڈر سکورز شامل ہوسکدے نیں۔</string>
   <string name="UsernameEditFragment_usernames_cannot_begin_with_a_number">صارف ناں کسے نمبر نال شروع نئیں ہوسکدے۔</string>
   <string name="UsernameEditFragment_username_is_invalid">صارف ناں ناقابل قبول اے۔</string>
   <string name="UsernameEditFragment_usernames_must_be_between_a_and_b_characters">صارف ناں %1$d تے %2$d حروف دے درمیان لازمی ہونا چائیدا اے۔</string>
@@ -820,6 +830,7 @@
   <string name="VerifyIdentityActivity_signal_needs_the_camera_permission_in_order_to_scan_a_qr_code_but_it_has_been_permanently_denied">QR کوڈ اسکین کرن لئی Signal نوں کیمرا دی اجازت دی لوڑھ ہندی اے، پر ایہدے توں ہمیشاں لئی منع کیتا گیا اے۔&lt; مہربانی کر کے ایپ دیاں ترتیباں تے جاری رکھو، "اجازتاں"چنو، تے "کیمرہ" فعال کرو۔</string>
   <string name="VerifyIdentityActivity_unable_to_scan_qr_code_without_camera_permission">کیمرے دی اجازت توں بغیر کیو آر کوڈ اسکین نئیں کر سکدا </string>
   <!--ViewOnceMessageActivity-->
+  <!--AudioView-->
   <!--MessageDisplayHelper-->
   <string name="MessageDisplayHelper_bad_encrypted_message">خراب خفیہ کیتا سنیہا</string>
   <string name="MessageDisplayHelper_message_encrypted_for_non_existing_session">غیر موجود سیشن لئی سنیہا خفیہ کیتا گیا اے</string>
@@ -829,7 +840,7 @@
   <!--MuteDialog-->
   <string name="MuteDialog_mute_notifications">اطلاعواں خموش کرو</string>
   <!--OutdatedBuildReminder-->
-  <string name="OutdatedBuildReminder_no_web_browser_installed">کوئی ویب براؤزر انسٹال نئیں اے!</string>
+  <!-- Removed by excludeNonTranslatables <string name="OutdatedBuildReminder_no_web_browser_installed">کوئی ویب براؤزر انسٹال نئیں اے!</string> -->
   <!--ApplicationMigrationService-->
   <string name="ApplicationMigrationService_import_in_progress">درآمد جاری اے</string>
   <string name="ApplicationMigrationService_importing_text_messages">متن سنیہے درآمد کرنا</string>
@@ -988,6 +999,7 @@
   <!--contact_selection_list_fragment-->
   <string name="contact_selection_list_fragment__signal_needs_access_to_your_contacts_in_order_to_display_them">Signal نوں تہادے رابطے وکھان لئی اوہناں تائیں رسائی دی لوڑھ اے۔</string>
   <string name="contact_selection_list_fragment__show_contacts">رابطے وکھاؤ</string>
+  <!--contact_selection_list_item-->
   <!--conversation_activity-->
   <string name="conversation_activity__type_message_push">Signal سنیہا </string>
   <string name="conversation_activity__type_message_sms_insecure">غیر محفوظ SMS</string>
@@ -1029,6 +1041,7 @@
   <string name="QuoteView_original_missing">اصل سنیہا نئیں لبھیا</string>
   <!--conversation_fragment-->
   <string name="conversation_fragment__scroll_to_the_bottom_content_description">تھلے تیکر سکرول کرو</string>
+  <!--safety_number_change_dialog-->
   <!--country_selection_fragment-->
   <string name="country_selection_fragment__loading_countries">ممالک لوڈ کر رئیا اے…</string>
   <string name="country_selection_fragment__search">لبھو</string>
@@ -1071,6 +1084,7 @@
     <item quantity="other">%d ہفتے</item>
   </plurals>
   <string name="expiration_weeks_abbreviated">%dw</string>
+  <string name="expiration_combined">%1$s %2$s</string>
   <!--unverified safety numbers-->
   <string name="IdentityUtil_unverified_banner_one">%s دے نال تہاڈا سیفٹی نمبر بدل گیا اے تے ہن تصدیق کیتا ہویا نئیں اے</string>
   <string name="IdentityUtil_unverified_banner_two">%1$s تے %2$s دے نال تہاڈے سیفٹی نمبر ہون ہور تصدیق کیتے ہوئے نئیں </string>
@@ -1147,19 +1161,6 @@
   <string name="EditProfileFragment__group_name">گروپ دا ناں</string>
   <!--recipient_preferences_activity-->
   <string name="recipient_preference_activity__shared_media">مشترکہ میڈیا</string>
-  <!--recipient_preferences-->
-  <string name="recipient_preferences__mute_conversation">گل بات خموش کرو</string>
-  <string name="recipient_preferences__custom_notifications">حسب ضرورت اطلاعواں</string>
-  <string name="recipient_preferences__custom_notifications_settings">سسٹم اطلاع دیاں ترتیباں</string>
-  <string name="recipient_preferences__notification_sound"> اطلاع دی اواز</string>
-  <string name="recipient_preferences__vibrate">وائبریٹ</string>
-  <string name="recipient_preferences__block">بلاک کرو</string>
-  <string name="recipient_preferences__color">رنگ</string>
-  <string name="recipient_preferences__view_safety_number">سیفٹی نمبر ویکھو</string>
-  <string name="recipient_preferences__chat_settings">چیٹ دیاں ترتیباں</string>
-  <string name="recipient_preferences__privacy">رازداری</string>
-  <string name="recipient_preferences__call_settings">کال دیاں ترتیباں</string>
-  <string name="recipient_preferences__ringtone">رنگ ٹون</string>
   <!--- redphone_call_controls-->
   <string name="redphone_call_card__signal_call">Signal کال</string>
   <!--registration_activity-->
@@ -1191,9 +1192,10 @@
   <string name="message_details_header__received">موصول ہویا</string>
   <string name="message_details_header__disappears">غائب ہویا</string>
   <string name="message_details_header__via"> دے راہیں</string>
-  <string name="message_details_header__to">تک:</string>
-  <string name="message_details_header__from">توں:</string>
-  <string name="message_details_header__with">نال:</string>
+  <!--message_details_recipient_header-->
+  <!--message_Details_recipient-->
+  <string name="message_details_recipient__failed_to_send">گھلن اچ ناکام ہویا</string>
+  <string name="message_details_recipient__new_safety_number">نواں سیفٹی نمبر</string>
   <!--AndroidManifest.xml-->
   <string name="AndroidManifest__create_passphrase">پاس فریز بناؤ</string>
   <string name="AndroidManifest__select_contacts">رابطے چنو </string>
@@ -1250,8 +1252,8 @@
   <string name="preferences__use_signal_for_viewing_and_storing_all_incoming_multimedia_messages"> آن والے سارے ملٹی میڈیا سنیہیاں لئی Signal ورتو</string>
   <string name="preferences__pref_enter_sends_title">کلیدی گھلنا درج کرو</string>
   <string name="preferences__pressing_the_enter_key_will_send_text_messages">درج کلید دبان نال متن سنیہے گھلے جان گے</string>
-  <string name="preferences__send_link_previews">لنک پیش نظارہ گھلو </string>
-  <string name="preferences__previews_are_supported_for">پیش نظارے Imgur،Instagram، Pinterest، Reddit، تے YouTube لنکس لئی تعاون یافتہ نیں</string>
+  <!-- Removed by excludeNonTranslatables <string name="preferences__send_link_previews">لنک پیش نظارہ گھلو </string> -->
+  <!-- Removed by excludeNonTranslatables <string name="preferences__previews_are_supported_for">پیش نظارے Imgur،Instagram، Pinterest، Reddit، تے YouTube لنکس لئی تعاون یافتہ نیں</string> -->
   <string name="preferences__choose_identity">شناخت چنو </string>
   <string name="preferences__choose_your_contact_entry_from_the_contacts_list">رابطے دی فہرست وچوں اپناں رابطہ اندراج چنو ۔</string>
   <string name="preferences__change_passphrase">پاس فریز بدلو</string>
@@ -1362,6 +1364,7 @@
   <string name="preferences_communication__sealed_sender_allow_from_anyone">کسے دے وی ولوں اجازت دیو</string>
   <string name="preferences_communication__sealed_sender_allow_from_anyone_description">غیر رابطے تے جہناں لوکاں نال تسیں اپناں پروفائل سانجھا نئیں کیتا اے اوہناں ولوں آن آلے سنیہیاں لئی مہر بند گھلن آلے نوں فعال کرو۔</string>
   <string name="preferences_communication__sealed_sender_learn_more">ہور جانو</string>
+  <!--Internal only preferences-->
   <!--****************************************-->
   <!--menus-->
   <!--****************************************-->
@@ -1394,6 +1397,7 @@
   <string name="conversation_list_batch__menu_select_all">سارے چنو</string>
   <string name="conversation_list_batch_archive__menu_archive_selected">چنیاں ہوئیاں نوں آرکائیو کرو </string>
   <string name="conversation_list_batch_unarchive__menu_unarchive_selected">چنیاں ہوئیاں نوں غیر آرکائیو کرو </string>
+  <string name="conversation_list_batch__menu_unarchive_selected">چنیاں ہوئیاں نوں غیر آرکائیو کرو </string>
   <!--conversation_list-->
   <string name="conversation_list_settings_shortcut">ترتیباں دا شارٹ کٹ</string>
   <string name="conversation_list_search_description">لبھو</string>
@@ -1514,7 +1518,6 @@
   <string name="CreateKbsPinFragment__create_a_new_pin">اک نواں پن بناؤ</string>
   <string name="CreateKbsPinFragment__you_can_choose_a_new_pin_as_long_as_this_device_is_registered">جدوں تائیں ایہہ آلہ رجسٹرڈ اے تساں اپنی پن تبدیل کر سکدے او۔</string>
   <string name="CreateKbsPinFragment__create_your_pin">آپناں پن بناوو</string>
-  <string name="CreateKbsPinFragment__pins_keep_information_stored_with_signal_encrypted">پن Signal دے نال ذخیرہ کیتی جانکاری نوں خفیہ کاری توں محفوظ رکھدا اے ایس لئی صرف تساں ایس تائیں رسائی حاصل کر سکدے او۔ جدوں تساں Signal نوں دوبارہ انسٹال کر دے او تے تساں دی پروفائل، ترتیباں تے رابطے بحال ہو جان گے۔</string>
   <string name="CreateKbsPinFragment__choose_a_stronger_pin">اک مضبوط پن منتخب کرو</string>
   <!--ConfirmKbsPinFragment-->
   <string name="ConfirmKbsPinFragment__pins_dont_match">پناں میچ نئیں کر دیاں۔ فیر کوشش کرو</string>
@@ -1525,13 +1528,13 @@
   <string name="ConfirmKbsPinFragment__creating_pin">پن بنا رئیا اے۔۔۔</string>
   <!--KbsSplashFragment-->
   <string name="KbsSplashFragment__introducing_pins">پناں متعارف کرا رئیا اے</string>
-  <string name="KbsSplashFragment__pins_keep_information_stored_with_signal_encrypted">پن Signal دے نال ذخیرہ کیتی جانکاری نوں خفیہ کاری توں محفوظ رکھدا اے ایس لئی صرف تساں ایس تائیں رسائی حاصل کر سکدے او۔ جدوں تساں Signal نوں دوبارہ انسٹال کر دے او تے تساں دی پروفائل، ترتیباں تے رابطے بحال ہو جان گے۔</string>
   <string name="KbsSplashFragment__learn_more">ہور جانو</string>
   <string name="KbsSplashFragment__registration_lock_equals_pin">رجسٹریشن لاک = پن</string>
   <string name="KbsSplashFragment__your_registration_lock_is_now_called_a_pin">تہاڈے رجسٹریشن لاک نوں ہن پن آکھیا جاندا اے، اور ایہہ ہور وی بوہت کجھ کردا اے۔ ایہنوں ہنڑی اپ ڈیٹ کرو۔</string>
   <string name="KbsSplashFragment__read_more_about_pins">پناں دے بارے اچ ہور پڑھو۔</string>
   <string name="KbsSplashFragment__update_pin">پن نوں اپ ڈیٹ کرو</string>
   <string name="KbsSplashFragment__create_your_pin">آپناں پن بناوو</string>
+  <string name="KbsSplashFragment__learn_more_about_pins">پن دے بارے اچ ہور جانیں</string>
   <!--KBS Reminder Dialog-->
   <string name="KbsReminderDialog__enter_your_signal_pin">آپناں Signal پن درج کرو</string>
   <string name="KbsReminderDialog__to_help_you_memorize_your_pin">تہانوں پن چیتے رکھن اچ مدد لئی، اسیں تھوڑے تھوڑے چر بعد تہانوں پن درج کرن دا آکھدے رہواں گے۔ کجھ ویلا لنگھن توں بعد  اسیں تہانوں گھٹ وار ایہدے لئی آکھاں گے۔</string>
@@ -1584,10 +1587,6 @@
   <string name="KbsMegaphone__update_pin">پن نوں اپ ڈیٹ کرو</string>
   <string name="KbsMegaphone__well_remind_you_later_creating_a_pin">اسیں تہانوں بعد اچ چیتا کرا دئیاں گے۔ %1$d دناں مگروں پن بناناں لازمی ہو جاوے گا۔</string>
   <string name="KbsMegaphone__well_remind_you_later_confirming_your_pin">اسیں تہانوں بعد اچ چیتا کرا دئیاں گے۔ آپنے پن دی تصدیق %1$d دناں مگروں لازمی ہو جاوے گی۔</string>
-  <!--Profile Names Megaphone-->
-  <string name="ProfileNamesMegaphone__this_will_be_displayed_when_you_start">جدوں تساں نویں گل وات شروع کر دے او یا ایس دا سانجھا کر دے او تے ایہہ ظاہر ہووے گا۔</string>
-  <string name="ProfileNamesMegaphone__add_profile_name">پروفائل نام نال رلاؤ</string>
-  <string name="ProfileNamesMegaphone__your_profile_can_now_include">تساں دی پروفائل اچ ہونڑ اک اختیاری اخیری ناں شامل ہوسکدا اے۔</string>
   <!--transport_selection_list_item-->
   <string name="transport_selection_list_item__transport_icon">ٹرانسپورٹ آئکن</string>
   <string name="ConversationListFragment_loading">لوڈ کر رئیا اے…</string>
@@ -1653,6 +1652,7 @@
   <string name="preferences_app_protection__change_your_pin">اپنی پن تبدیل کرو</string>
   <string name="preferences_app_protection__pins_keep_information_stored_with_signal_encrypted">پن Signal دے نال ذخیرہ کیتی جانکاری نوں خفیہ کاری توں محفوظ رکھدا اے ایس لئی صرف تساں ایس تائیں رسائی حاصل کر سکدے او۔ جدوں تساں Signal نوں دوبارہ انسٹال کر دے او تے تساں دی پروفائل، ترتیباں تے رابطے بحال ہو جان گے۔</string>
   <string name="preferences_app_protection__confirm_pin">پن دی تصدیق کرو</string>
+  <string name="preferences_app_protection__confirm_your_signal_pin">اپنی Signal پن دی تصدیق کرو</string>
   <string name="preferences_app_protection__incorrect_pin_try_again">غلط پن۔ فیر کوشش کرو</string>
   <string name="AppProtectionPreferenceFragment_none">کوئی نئیں</string>
   <string name="registration_activity__the_registration_lock_pin_is_not_the_same_as_the_sms_verification_code_you_just_received_please_enter_the_pin_you_previously_configured_in_the_application">رجسٹریشن لاک پن تے تہانوں ہنی موصول ہویا SMS تصدیقی کوڈ اک ورگا نئیں اے۔ مہربانی کر کے درخاست اچ اپناں پہلاں تشکیل دتا ہویا پن درج کرو۔</string>
@@ -1695,12 +1695,14 @@
   <string name="recipient_preferences__about">متعلق</string>
   <string name="Recipient_unknown">نامعلوم</string>
   <!--RecipientBottomSheet-->
-  <string name="RecipientBottomSheet_message"> سنیہا</string>
-  <string name="RecipientBottomSheet_call">کال کرو</string>
   <string name="RecipientBottomSheet_block">بلاک کرو</string>
   <string name="RecipientBottomSheet_unblock">ان بلاک کرو</string>
+  <string name="RecipientBottomSheet_add_to_contacts">رابطیاں اچ شامل کرو</string>
   <string name="RecipientBottomSheet_view_safety_number">سیفٹی نمبر ویکھو</string>
+  <string name="RecipientBottomSheet_message_description"> سنیہا</string>
   <string name="RecipientBottomSheet_remove">ہٹاؤ</string>
+  <string name="RecipientBottomSheet_copied_to_clipboard">کلپ بورڈ تے کاپی کیتا</string>
   <string name="GroupRecipientListItem_admin">ایڈمن</string>
+  <!--GroupsLearnMoreBottomSheetDialogFragment-->
   <!--EOF-->
 </resources>

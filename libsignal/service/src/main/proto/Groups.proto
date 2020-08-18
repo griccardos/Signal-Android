@@ -25,11 +25,11 @@ message Member {
     ADMINISTRATOR = 2;
   }
 
-  bytes  userId          = 1;
-  Role   role            = 2;
-  bytes  profileKey      = 3;
-  bytes  presentation    = 4;
-  uint32 joinedAtVersion = 5;
+  bytes  userId           = 1;
+  Role   role             = 2;
+  bytes  profileKey       = 3;
+  bytes  presentation     = 4;
+  uint32 joinedAtRevision = 5;
 }
 
 message PendingMember {
@@ -41,7 +41,6 @@ message PendingMember {
 message AccessControl {
   enum AccessRequired {
     UNKNOWN       = 0;
-    ANY           = 1;
     MEMBER        = 2;
     ADMINISTRATOR = 3;
   }
@@ -56,7 +55,7 @@ message Group {
            string        avatar                    = 3;
            bytes         disappearingMessagesTimer = 4;
            AccessControl accessControl             = 5;
-           uint32        version                   = 6;
+           uint32        revision                  = 6;
   repeated Member        members                   = 7;
   repeated PendingMember pendingMembers            = 8;
 }
@@ -115,7 +114,7 @@ message GroupChange {
     }
 
              bytes                                 sourceUuid                      = 1;
-             uint32                                version                         = 2;
+             uint32                                revision                        = 2;
     repeated AddMemberAction                       addMembers                      = 3;
     repeated DeleteMemberAction                    deleteMembers                   = 4;
     repeated ModifyMemberRoleAction                modifyMemberRoles               = 5;
@@ -130,8 +129,9 @@ message GroupChange {
              ModifyMembersAccessControlAction      modifyMemberAccess              = 14;
   }
 
-  bytes actions         = 1;
-  bytes serverSignature = 2;
+  bytes  actions         = 1;
+  bytes  serverSignature = 2;
+  uint32 changeEpoch     = 3;
 }
 
 message GroupChanges {
@@ -148,5 +148,16 @@ message GroupAttributeBlob {
     string title                        = 1;
     bytes  avatar                       = 2;
     uint32 disappearingMessagesDuration = 3;
+  }
+}
+
+message GroupInviteLink {
+  message GroupInviteLinkContentsV1 {
+      bytes groupMasterKey     = 1;
+      bytes inviteLinkPassword = 2;
+  }
+
+  oneof contents {
+    GroupInviteLinkContentsV1 v1Contents = 1;
   }
 }

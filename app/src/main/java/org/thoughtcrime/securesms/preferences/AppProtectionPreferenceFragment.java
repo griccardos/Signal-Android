@@ -3,21 +3,17 @@ package org.thoughtcrime.securesms.preferences;
 import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.InputType;
-import android.text.TextUtils;
 import android.util.DisplayMetrics;
-import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.EditText;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.autofill.HintConstants;
@@ -42,30 +38,25 @@ import org.thoughtcrime.securesms.jobs.MultiDeviceConfigurationUpdateJob;
 import org.thoughtcrime.securesms.jobs.RefreshAttributesJob;
 import org.thoughtcrime.securesms.keyvalue.KbsValues;
 import org.thoughtcrime.securesms.keyvalue.PinValues;
+import org.thoughtcrime.securesms.keyvalue.SettingsValues;
 import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.lock.PinHashing;
-import org.thoughtcrime.securesms.lock.RegistrationLockV1Dialog;
-import org.thoughtcrime.securesms.lock.SignalPinReminderDialog;
 import org.thoughtcrime.securesms.lock.v2.CreateKbsPinActivity;
 import org.thoughtcrime.securesms.lock.v2.KbsConstants;
 import org.thoughtcrime.securesms.lock.v2.RegistrationLockUtil;
 import org.thoughtcrime.securesms.logging.Log;
-import org.thoughtcrime.securesms.pin.PinState;
+import org.thoughtcrime.securesms.megaphone.MegaphoneRepository;
+import org.thoughtcrime.securesms.megaphone.Megaphones;
 import org.thoughtcrime.securesms.pin.RegistrationLockV2Dialog;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.service.KeyCachingService;
 import org.thoughtcrime.securesms.storage.StorageSyncHelper;
 import org.thoughtcrime.securesms.util.CommunicationActions;
-import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.ThemeUtil;
 import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
-import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
-import org.thoughtcrime.securesms.util.views.SimpleProgressDialog;
-import org.w3c.dom.Text;
 
-import java.io.IOException;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -102,12 +93,17 @@ public class AppProtectionPreferenceFragment extends CorrectedPreferenceFragment
     this.findPreference(TextSecurePreferences.PASSPHRASE_TIMEOUT_INTERVAL_PREF).setOnPreferenceClickListener(new PassphraseIntervalClickListener());
     this.findPreference(TextSecurePreferences.READ_RECEIPTS_PREF).setOnPreferenceChangeListener(new ReadReceiptToggleListener());
     this.findPreference(TextSecurePreferences.TYPING_INDICATORS).setOnPreferenceChangeListener(new TypingIndicatorsToggleListener());
-    this.findPreference(TextSecurePreferences.LINK_PREVIEWS).setOnPreferenceChangeListener(new LinkPreviewToggleListener());
     this.findPreference(PREFERENCE_CATEGORY_BLOCKED).setOnPreferenceClickListener(new BlockedContactsClickListener());
     this.findPreference(TextSecurePreferences.SHOW_UNIDENTIFIED_DELIVERY_INDICATORS).setOnPreferenceChangeListener(new ShowUnidentifiedDeliveryIndicatorsChangedListener());
     this.findPreference(TextSecurePreferences.UNIVERSAL_UNIDENTIFIED_ACCESS).setOnPreferenceChangeListener(new UniversalUnidentifiedAccessChangedListener());
     this.findPreference(PREFERENCE_UNIDENTIFIED_LEARN_MORE).setOnPreferenceClickListener(new UnidentifiedLearnMoreClickListener());
     disablePassphrase.setOnPreferenceChangeListener(new DisablePassphraseClickListener());
+
+
+    SwitchPreferenceCompat linkPreviewPref = (SwitchPreferenceCompat) this.findPreference(SettingsValues.LINK_PREVIEWS);
+    linkPreviewPref.setChecked(SignalStore.settings().isLinkPreviewsEnabled());
+    linkPreviewPref.setPreferenceDataStore(SignalStore.getPreferenceDataStore());
+    linkPreviewPref.setOnPreferenceChangeListener(new LinkPreviewToggleListener());
 
     initializeVisibility();
   }
@@ -127,38 +123,27 @@ public class AppProtectionPreferenceFragment extends CorrectedPreferenceFragment
 
     disablePassphrase.setChecked(!TextSecurePreferences.isPasswordDisabled(getActivity()));
 
-    Preference             registrationLockV1Group = this.findPreference("prefs_lock_v1");
-    SwitchPreferenceCompat registrationLockV1      = (SwitchPreferenceCompat) this.findPreference(TextSecurePreferences.REGISTRATION_LOCK_PREF_V1);
-    Preference             signalPinGroup          = this.findPreference("prefs_signal_pin");
     Preference             signalPinCreateChange   = this.findPreference(TextSecurePreferences.SIGNAL_PIN_CHANGE);
     SwitchPreferenceCompat signalPinReminders      = (SwitchPreferenceCompat) this.findPreference(PinValues.PIN_REMINDERS_ENABLED);
     SwitchPreferenceCompat registrationLockV2      = (SwitchPreferenceCompat) this.findPreference(KbsValues.V2_LOCK_ENABLED);
 
-
-    if (FeatureFlags.pinsForAll()) {
-      registrationLockV1Group.setVisible(false);
-
-      if (SignalStore.kbsValues().hasPin()) {
-        signalPinCreateChange.setOnPreferenceClickListener(new KbsPinUpdateListener());
-        signalPinCreateChange.setTitle(R.string.preferences_app_protection__change_your_pin);
-        registrationLockV2.setEnabled(true);
-      } else {
-        signalPinCreateChange.setOnPreferenceClickListener(new KbsPinCreateListener());
-        signalPinCreateChange.setTitle(R.string.preferences_app_protection__create_a_pin);
-        signalPinReminders.setEnabled(false);
-        registrationLockV2.setEnabled(false);
-      }
+    if (SignalStore.kbsValues().hasPin() && !SignalStore.kbsValues().hasOptedOut()) {
+      signalPinCreateChange.setOnPreferenceClickListener(new KbsPinUpdateListener());
+      signalPinCreateChange.setTitle(R.string.preferences_app_protection__change_your_pin);
+      signalPinReminders.setEnabled(true);
+      registrationLockV2.setEnabled(true);
     } else {
-      signalPinGroup.setVisible(false);
-      registrationLockV1.setChecked(RegistrationLockUtil.userHasRegistrationLock(requireContext()));
-      registrationLockV1.setOnPreferenceClickListener(new AccountLockClickListener());
+      signalPinCreateChange.setOnPreferenceClickListener(new KbsPinCreateListener());
+      signalPinCreateChange.setTitle(R.string.preferences_app_protection__create_a_pin);
+      signalPinReminders.setEnabled(false);
+      registrationLockV2.setEnabled(false);
     }
   }
 
   @Override
   public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
     if (requestCode == CreateKbsPinActivity.REQUEST_NEW_PIN && resultCode == CreateKbsPinActivity.RESULT_OK) {
-      Snackbar.make(requireView(), R.string.ConfirmKbsPinFragment__pin_created, Snackbar.LENGTH_LONG).show();
+      Snackbar.make(requireView(), R.string.ConfirmKbsPinFragment__pin_created, Snackbar.LENGTH_LONG).setTextColor(Color.WHITE).show();
     }
   }
 
@@ -245,21 +230,6 @@ public class AppProtectionPreferenceFragment extends CorrectedPreferenceFragment
     }
   }
 
-  private class AccountLockClickListener implements Preference.OnPreferenceClickListener {
-    @Override
-    public boolean onPreferenceClick(Preference preference) {
-      Context context = requireContext();
-
-      if (RegistrationLockUtil.userHasRegistrationLock(context)) {
-        RegistrationLockV1Dialog.showRegistrationUnlockPrompt(context, (SwitchPreferenceCompat)preference);
-      } else {
-        RegistrationLockV1Dialog.showRegistrationLockPrompt(context, (SwitchPreferenceCompat)preference);
-      }
-
-      return true;
-    }
-  }
-
   private class BlockedContactsClickListener implements Preference.OnPreferenceClickListener {
     @Override
     public boolean onPreferenceClick(Preference preference) {
@@ -279,7 +249,7 @@ public class AppProtectionPreferenceFragment extends CorrectedPreferenceFragment
         ApplicationDependencies.getJobManager().add(new MultiDeviceConfigurationUpdateJob(enabled,
                                                                                           TextSecurePreferences.isTypingIndicatorsEnabled(requireContext()),
                                                                                           TextSecurePreferences.isShowUnidentifiedDeliveryIndicatorsEnabled(getContext()),
-                                                                                          TextSecurePreferences.isLinkPreviewsEnabled(getContext())));
+                                                                                          SignalStore.settings().isLinkPreviewsEnabled()));
 
       });
       return true;
@@ -296,7 +266,7 @@ public class AppProtectionPreferenceFragment extends CorrectedPreferenceFragment
         ApplicationDependencies.getJobManager().add(new MultiDeviceConfigurationUpdateJob(TextSecurePreferences.isReadReceiptsEnabled(requireContext()),
                                                                                           enabled,
                                                                                           TextSecurePreferences.isShowUnidentifiedDeliveryIndicatorsEnabled(getContext()),
-                                                                                          TextSecurePreferences.isLinkPreviewsEnabled(getContext())));
+                                                                                          SignalStore.settings().isLinkPreviewsEnabled()));
 
         if (!enabled) {
           ApplicationContext.getInstance(requireContext()).getTypingStatusRepository().clear();
@@ -317,14 +287,16 @@ public class AppProtectionPreferenceFragment extends CorrectedPreferenceFragment
                                                                                           TextSecurePreferences.isTypingIndicatorsEnabled(requireContext()),
                                                                                           TextSecurePreferences.isShowUnidentifiedDeliveryIndicatorsEnabled(requireContext()),
                                                                                           enabled));
+        if (enabled) {
+          ApplicationDependencies.getMegaphoneRepository().markFinished(Megaphones.Event.LINK_PREVIEWS);
+        }
       });
       return true;
     }
   }
 
   public static CharSequence getSummary(Context context) {
-    final   int    privacySummaryResId = FeatureFlags.pinsForAll() ? R.string.ApplicationPreferencesActivity_privacy_summary_screen_lock
-                                                                   : R.string.ApplicationPreferencesActivity_privacy_summary;
+    final   int    privacySummaryResId = R.string.ApplicationPreferencesActivity_privacy_summary;;
     final   String onRes               = context.getString(R.string.ApplicationPreferencesActivity_on);
     final   String offRes              = context.getString(R.string.ApplicationPreferencesActivity_off);
     boolean registrationLockEnabled    = RegistrationLockUtil.userHasRegistrationLock(context);
@@ -422,7 +394,7 @@ public class AppProtectionPreferenceFragment extends CorrectedPreferenceFragment
         ApplicationDependencies.getJobManager().add(new MultiDeviceConfigurationUpdateJob(TextSecurePreferences.isReadReceiptsEnabled(getContext()),
                                                                                           TextSecurePreferences.isTypingIndicatorsEnabled(getContext()),
                                                                                           enabled,
-                                                                                          TextSecurePreferences.isLinkPreviewsEnabled(getContext())));
+                                                                                          SignalStore.settings().isLinkPreviewsEnabled()));
       });
 
       return true;

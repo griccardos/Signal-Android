@@ -97,7 +97,17 @@ public class SendReadReceiptJob extends BaseJob {
       return;
     }
 
-    Recipient                   recipient      = Recipient.resolved(recipientId);
+    Recipient recipient = Recipient.resolved(recipientId);
+    if (recipient.isBlocked()) {
+      Log.w(TAG, "Refusing to send receipts to blocked recipient");
+      return;
+    }
+
+    if (recipient.isGroup()) {
+      Log.w(TAG, "Refusing to send receipts to group");
+      return;
+    }
+
     SignalServiceMessageSender  messageSender  = ApplicationDependencies.getSignalServiceMessageSender();
     SignalServiceAddress        remoteAddress  = RecipientUtil.toSignalServiceAddress(context, recipient);
     SignalServiceReceiptMessage receiptMessage = new SignalServiceReceiptMessage(SignalServiceReceiptMessage.Type.READ, messageIds, timestamp);

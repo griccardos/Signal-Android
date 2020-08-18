@@ -1,35 +1,42 @@
 package org.thoughtcrime.securesms.database.identity;
 
-
-import android.content.Context;
+import androidx.annotation.NonNull;
 
 import org.thoughtcrime.securesms.database.IdentityDatabase.IdentityRecord;
 import org.thoughtcrime.securesms.database.IdentityDatabase.VerifiedStatus;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.whispersystems.libsignal.util.guava.Optional;
 
-import java.util.LinkedList;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-public class IdentityRecordList {
+public final class IdentityRecordList {
 
-  private static final String TAG = IdentityRecordList.class.getSimpleName();
+  private final List<IdentityRecord> identityRecords;
+  private final boolean              isVerified;
+  private final boolean              isUnverified;
 
-  private final List<IdentityRecord> identityRecords = new LinkedList<>();
-
-  public void add(Optional<IdentityRecord> identityRecord) {
-    if (identityRecord.isPresent()) {
-      identityRecords.add(identityRecord.get());
-    }
+  public IdentityRecordList(@NonNull Collection<IdentityRecord> records) {
+    identityRecords = new ArrayList<>(records);
+    isVerified      = isVerified(identityRecords);
+    isUnverified    = isUnverified(identityRecords);
   }
 
-  public void replaceWith(IdentityRecordList identityRecordList) {
-    identityRecords.clear();
-    identityRecords.addAll(identityRecordList.identityRecords);
+  public List<IdentityRecord> getIdentityRecords() {
+    return Collections.unmodifiableList(identityRecords);
   }
 
   public boolean isVerified() {
+    return isVerified;
+  }
+
+  public boolean isUnverified() {
+    return isUnverified;
+  }
+
+  private static boolean isVerified(@NonNull Collection<IdentityRecord> identityRecords) {
     for (IdentityRecord identityRecord : identityRecords) {
       if (identityRecord.getVerifiedStatus() != VerifiedStatus.VERIFIED) {
         return false;
@@ -39,7 +46,7 @@ public class IdentityRecordList {
     return identityRecords.size() > 0;
   }
 
-  public boolean isUnverified() {
+  private static boolean isUnverified(@NonNull Collection<IdentityRecord> identityRecords) {
     for (IdentityRecord identityRecord : identityRecords) {
       if (identityRecord.getVerifiedStatus() == VerifiedStatus.UNVERIFIED) {
         return true;
@@ -49,8 +56,26 @@ public class IdentityRecordList {
     return false;
   }
 
-  public boolean isUntrusted() {
+  public boolean isUnverified(boolean excludeFirstUse) {
     for (IdentityRecord identityRecord : identityRecords) {
+      if (excludeFirstUse && identityRecord.isFirstUse()) {
+        continue;
+      }
+
+      if (identityRecord.getVerifiedStatus() == VerifiedStatus.UNVERIFIED) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  public boolean isUntrusted(boolean excludeFirstUse) {
+    for (IdentityRecord identityRecord : identityRecords) {
+      if (excludeFirstUse && identityRecord.isFirstUse()) {
+        continue;
+      }
+
       if (isUntrusted(identityRecord)) {
         return true;
       }
@@ -59,8 +84,8 @@ public class IdentityRecordList {
     return false;
   }
 
-  public List<IdentityRecord> getUntrustedRecords() {
-    List<IdentityRecord> results = new LinkedList<>();
+  public @NonNull List<IdentityRecord> getUntrustedRecords() {
+    List<IdentityRecord> results = new ArrayList<>(identityRecords.size());
 
     for (IdentityRecord identityRecord : identityRecords) {
       if (isUntrusted(identityRecord)) {
@@ -71,8 +96,8 @@ public class IdentityRecordList {
     return results;
   }
 
-  public List<Recipient> getUntrustedRecipients(Context context) {
-    List<Recipient> untrusted = new LinkedList<>();
+  public @NonNull List<Recipient> getUntrustedRecipients() {
+    List<Recipient> untrusted = new ArrayList<>(identityRecords.size());
 
     for (IdentityRecord identityRecord : identityRecords) {
       if (isUntrusted(identityRecord)) {
@@ -83,8 +108,8 @@ public class IdentityRecordList {
     return untrusted;
   }
 
-  public List<IdentityRecord> getUnverifiedRecords() {
-    List<IdentityRecord> results = new LinkedList<>();
+  public @NonNull List<IdentityRecord> getUnverifiedRecords() {
+    List<IdentityRecord> results = new ArrayList<>(identityRecords.size());
 
     for (IdentityRecord identityRecord : identityRecords) {
       if (identityRecord.getVerifiedStatus() == VerifiedStatus.UNVERIFIED) {
@@ -95,8 +120,8 @@ public class IdentityRecordList {
     return results;
   }
 
-  public List<Recipient> getUnverifiedRecipients(Context context) {
-    List<Recipient> unverified = new LinkedList<>();
+  public @NonNull List<Recipient> getUnverifiedRecipients() {
+    List<Recipient> unverified = new ArrayList<>(identityRecords.size());
 
     for (IdentityRecord identityRecord : identityRecords) {
       if (identityRecord.getVerifiedStatus() == VerifiedStatus.UNVERIFIED) {
@@ -107,7 +132,7 @@ public class IdentityRecordList {
     return unverified;
   }
 
-  private boolean isUntrusted(IdentityRecord identityRecord) {
+  private static boolean isUntrusted(@NonNull IdentityRecord identityRecord) {
     return !identityRecord.isApprovedNonBlocking() &&
            System.currentTimeMillis() - identityRecord.getTimestamp() < TimeUnit.SECONDS.toMillis(5);
   }

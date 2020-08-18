@@ -20,6 +20,7 @@ import org.thoughtcrime.securesms.contactshare.Contact;
 import org.thoughtcrime.securesms.contactshare.ContactModelMapper;
 import org.thoughtcrime.securesms.crypto.ProfileKeyUtil;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
+import org.thoughtcrime.securesms.database.model.Mention;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.events.PartProgressEvent;
 import org.thoughtcrime.securesms.jobmanager.Job;
@@ -30,13 +31,13 @@ import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader;
 import org.thoughtcrime.securesms.mms.OutgoingMediaMessage;
 import org.thoughtcrime.securesms.mms.PartAuthority;
-import org.thoughtcrime.securesms.notifications.MessageNotifier;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.thoughtcrime.securesms.recipients.RecipientUtil;
 import org.thoughtcrime.securesms.util.Base64;
 import org.thoughtcrime.securesms.util.BitmapDecodingException;
 import org.thoughtcrime.securesms.util.BitmapUtil;
+import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.Hex;
 import org.thoughtcrime.securesms.util.MediaUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
@@ -72,9 +73,9 @@ public abstract class PushSendJob extends SendJob {
     super(parameters);
   }
 
-  protected static Job.Parameters constructParameters(@NonNull Recipient recipient) {
+  protected static Job.Parameters constructParameters(@NonNull Recipient recipient, boolean hasMedia) {
     return new Parameters.Builder()
-                         .setQueue(recipient.getId().toQueueKey())
+                         .setQueue(recipient.getId().toQueueKey(hasMedia))
                          .addConstraint(NetworkConstraint.KEY)
                          .setLifespan(TimeUnit.DAYS.toMillis(1))
                          .setMaxAttempts(Parameters.UNLIMITED)
@@ -110,23 +111,6 @@ public abstract class PushSendJob extends SendJob {
     return Optional.of(ProfileKeyUtil.getProfileKey(context));
   }
 
-  protected SignalServiceAddress getPushAddress(@NonNull Recipient recipient) {
-    return RecipientUtil.toSignalServiceAddress(context, recipient);
-  }
-
-  protected List<SignalServiceAttachment> getAttachmentsFor(List<Attachment> parts) {
-    List<SignalServiceAttachment> attachments = new LinkedList<>();
-
-    for (final Attachment attachment : parts) {
-      SignalServiceAttachment converted = getAttachmentFor(attachment);
-      if (converted != null) {
-        attachments.add(converted);
-      }
-    }
-
-    return attachments;
-  }
-
   protected SignalServiceAttachment getAttachmentFor(Attachment attachment) {
     try {
       if (attachment.getDataUri() == null || attachment.getSize() == 0) throw new IOException("Assertion failed, outgoing attachment has no data!");
@@ -137,6 +121,7 @@ public abstract class PushSendJob extends SendJob {
                                     .withLength(attachment.getSize())
                                     .withFileName(attachment.getFileName())
                                     .withVoiceNote(attachment.isVoiceNote())
+                                    .withBorderless(attachment.isBorderless())
                                     .withWidth(attachment.getWidth())
                                     .withHeight(attachment.getHeight())
                                     .withCaption(attachment.getCaption())
@@ -167,10 +152,16 @@ public abstract class PushSendJob extends SendJob {
     return new HashSet<>(Stream.of(attachments).map(a -> {
                                                  AttachmentUploadJob attachmentUploadJob = new AttachmentUploadJob(((DatabaseAttachment) a).getAttachmentId());
 
-                                                 jobManager.startChain(AttachmentCompressionJob.fromAttachment((DatabaseAttachment) a, false, -1))
-                                                           .then(new ResumableUploadSpecJob())
-                                                           .then(attachmentUploadJob)
-                                                           .enqueue();
+                                                 if (message.isGroup()) {
+                                                   jobManager.startChain(AttachmentCompressionJob.fromAttachment((DatabaseAttachment) a, false, -1))
+                                                             .then(attachmentUploadJob)
+                                                             .enqueue();
+                                                 } else {
+                                                   jobManager.startChain(AttachmentCompressionJob.fromAttachment((DatabaseAttachment) a, false, -1))
+                                                             .then(new ResumableUploadSpecJob())
+                                                             .then(attachmentUploadJob)
+                                                             .enqueue();
+                                                 }
 
                                                  return attachmentUploadJob.getId();
                                                })
@@ -207,6 +198,7 @@ public abstract class PushSendJob extends SendJob {
                                                 Optional.fromNullable(attachment.getDigest()),
                                                 Optional.fromNullable(attachment.getFileName()),
                                                 attachment.isVoiceNote(),
+                                                attachment.isBorderless(),
                                                 Optional.fromNullable(attachment.getCaption()),
                                                 Optional.fromNullable(attachment.getBlurHash()).transform(BlurHash::getHash),
                                                 attachment.getUploadTimestamp());
@@ -221,16 +213,17 @@ public abstract class PushSendJob extends SendJob {
     Recipient recipient = DatabaseFactory.getThreadDatabase(context).getRecipientForThreadId(threadId);
 
     if (threadId != -1 && recipient != null) {
-      MessageNotifier.notifyMessageDeliveryFailed(context, recipient, threadId);
+      ApplicationDependencies.getMessageNotifier().notifyMessageDeliveryFailed(context, recipient, threadId);
     }
   }
 
-  protected Optional<SignalServiceDataMessage.Quote> getQuoteFor(OutgoingMediaMessage message) {
+  protected Optional<SignalServiceDataMessage.Quote> getQuoteFor(OutgoingMediaMessage message) throws IOException {
     if (message.getOutgoingQuote() == null) return Optional.absent();
 
     long                                                  quoteId             = message.getOutgoingQuote().getId();
     String                                                quoteBody           = message.getOutgoingQuote().getText();
     RecipientId                                           quoteAuthor         = message.getOutgoingQuote().getAuthor();
+    List<SignalServiceDataMessage.Mention>                quoteMentions       = getMentionsFor(message.getOutgoingQuote().getMentions());
     List<SignalServiceDataMessage.Quote.QuotedAttachment> quoteAttachments    = new LinkedList<>();
     List<Attachment>                                      filteredAttachments = Stream.of(message.getOutgoingQuote().getAttachments())
                                                                                       .filterNot(a -> MediaUtil.isViewOnceType(a.getContentType()))
@@ -252,13 +245,18 @@ public abstract class PushSendJob extends SendJob {
         }
 
         if (thumbnailData != null) {
-          thumbnail = SignalServiceAttachment.newStreamBuilder()
-                                             .withContentType(thumbnailType)
-                                             .withWidth(thumbnailData.getWidth())
-                                             .withHeight(thumbnailData.getHeight())
-                                             .withLength(thumbnailData.getBitmap().length)
-                                             .withStream(new ByteArrayInputStream(thumbnailData.getBitmap()))
-                                             .build();
+          SignalServiceAttachment.Builder builder = SignalServiceAttachment.newStreamBuilder()
+                                                                           .withContentType(thumbnailType)
+                                                                           .withWidth(thumbnailData.getWidth())
+                                                                           .withHeight(thumbnailData.getHeight())
+                                                                           .withLength(thumbnailData.getBitmap().length)
+                                                                           .withStream(new ByteArrayInputStream(thumbnailData.getBitmap()));
+
+          if (FeatureFlags.attachmentsV3()) {
+            builder.withResumableUploadSpec(ApplicationDependencies.getSignalServiceMessageSender().getResumableUploadSpec());
+          }
+
+          thumbnail = builder.build();
         }
 
         quoteAttachments.add(new SignalServiceDataMessage.Quote.QuotedAttachment(attachment.getContentType(),
@@ -271,7 +269,7 @@ public abstract class PushSendJob extends SendJob {
 
     Recipient            quoteAuthorRecipient = Recipient.resolved(quoteAuthor);
     SignalServiceAddress quoteAddress         = RecipientUtil.toSignalServiceAddress(context, quoteAuthorRecipient);
-    return Optional.of(new SignalServiceDataMessage.Quote(quoteId, quoteAddress, quoteBody, quoteAttachments));
+    return Optional.of(new SignalServiceDataMessage.Quote(quoteId, quoteAddress, quoteBody, quoteAttachments, quoteMentions));
   }
 
   protected Optional<SignalServiceDataMessage.Sticker> getStickerFor(OutgoingMediaMessage message) {
@@ -319,6 +317,12 @@ public abstract class PushSendJob extends SendJob {
       SignalServiceAttachment attachment = lp.getThumbnail().isPresent() ? getAttachmentPointerFor(lp.getThumbnail().get()) : null;
       return new Preview(lp.getUrl(), lp.getTitle(), Optional.fromNullable(attachment));
     }).toList();
+  }
+
+  List<SignalServiceDataMessage.Mention> getMentionsFor(@NonNull List<Mention> mentions) {
+    return Stream.of(mentions)
+                 .map(m -> new SignalServiceDataMessage.Mention(Recipient.resolved(m.getRecipientId()).requireUuid(), m.getStart(), m.getLength()))
+                 .toList();
   }
 
   protected void rotateSenderCertificateIfNecessary() throws IOException {

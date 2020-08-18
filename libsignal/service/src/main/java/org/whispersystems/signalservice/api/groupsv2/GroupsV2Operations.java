@@ -39,6 +39,7 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -51,6 +52,9 @@ public final class GroupsV2Operations {
 
   /** Used for undecryptable pending invites */
   public static final UUID UNKNOWN_UUID = UuidUtil.UNKNOWN_UUID;
+
+  /** Highest change epoch this class knows now to decrypt */
+  public static final int HIGHEST_KNOWN_EPOCH = 0;
 
   private final ServerPublicParams        serverPublicParams;
   private final ClientZkProfileOperations clientZkProfileOperations;
@@ -83,7 +87,7 @@ public final class GroupsV2Operations {
     final GroupOperations   groupOperations   = forGroup(groupSecretParams);
 
     Group.Builder group = Group.newBuilder()
-                               .setVersion(0)
+                               .setRevision(0)
                                .setPublicKey(ByteString.copyFrom(groupSecretParams.getPublicParams().serialize()))
                                .setTitle(groupOperations.encryptTitle(title))
                                .setDisappearingMessagesTimer(groupOperations.encryptTimer(0))
@@ -132,42 +136,9 @@ public final class GroupsV2Operations {
       this.clientZkGroupCipher = new ClientZkGroupCipher(groupSecretParams);
     }
 
-    public GroupChange.Actions.Builder createModifyGroupTitleAndMembershipChange(final Optional<String> title,
-                                                                                 final Set<GroupCandidate> membersToAdd,
-                                                                                 final Set<UUID> membersToRemove)
-    {
-      if (!Collections.disjoint(GroupCandidate.toUuidList(membersToAdd), membersToRemove)) {
-        throw new IllegalArgumentException("Overlap between add and remove sets");
-      }
-
-      final GroupOperations groupOperations = forGroup(groupSecretParams);
-
-      GroupChange.Actions.Builder actions = GroupChange.Actions.newBuilder();
-
-      if (title.isPresent()) {
-        actions.setModifyTitle(GroupChange.Actions.ModifyTitleAction.newBuilder()
-                                                                    .setTitle(encryptTitle(title.get())));
-      }
-
-      for (GroupCandidate credential : membersToAdd) {
-        Member.Role          newMemberRole        = Member.Role.DEFAULT;
-        ProfileKeyCredential profileKeyCredential = credential.getProfileKeyCredential().orNull();
-
-        if (profileKeyCredential != null) {
-          actions.addAddMembers(GroupChange.Actions.AddMemberAction.newBuilder()
-                                                                   .setAdded(groupOperations.member(profileKeyCredential, newMemberRole)));
-        } else {
-          actions.addAddPendingMembers(GroupChange.Actions.AddPendingMemberAction.newBuilder()
-                                                                                 .setAdded(groupOperations.invitee(credential.getUuid(), newMemberRole)));
-        }
-      }
-
-      for (UUID remove: membersToRemove) {
-        actions.addDeleteMembers(GroupChange.Actions.DeleteMemberAction.newBuilder()
-                                                                       .setDeletedUserId(encryptUuid(remove)));
-      }
-
-      return actions;
+    public GroupChange.Actions.Builder createModifyGroupTitle(final String title) {
+      return GroupChange.Actions.newBuilder().setModifyTitle(GroupChange.Actions.ModifyTitleAction.newBuilder()
+                                                                                                  .setTitle(encryptTitle(title)));
     }
 
     public GroupChange.Actions.Builder createModifyGroupMembershipChange(Set<GroupCandidate> membersToAdd, UUID selfUuid) {
@@ -198,6 +169,18 @@ public final class GroupsV2Operations {
       for (UUID remove: membersToRemove) {
         actions.addDeleteMembers(GroupChange.Actions.DeleteMemberAction.newBuilder()
                                                                        .setDeletedUserId(encryptUuid(remove)));
+      }
+
+      return actions;
+    }
+
+    public GroupChange.Actions.Builder createLeaveAndPromoteMembersToAdmin(UUID self, List<UUID> membersToMakeAdmin) {
+      GroupChange.Actions.Builder actions = createRemoveMembersChange(Collections.singleton(self));
+
+      for (UUID member : membersToMakeAdmin) {
+        actions.addModifyMemberRoles(GroupChange.Actions.ModifyMemberRoleAction.newBuilder()
+                                                                               .setUserId(encryptUuid(member))
+                                                                               .setRole(Member.Role.ADMINISTRATOR));
       }
 
       return actions;
@@ -281,7 +264,7 @@ public final class GroupsV2Operations {
                            .setTitle(decryptTitle(group.getTitle()))
                            .setAvatar(group.getAvatar())
                            .setAccessControl(group.getAccessControl())
-                           .setVersion(group.getVersion())
+                           .setRevision(group.getRevision())
                            .addAllMembers(decryptedMembers)
                            .addAllPendingMembers(decryptedPendingMembers)
                            .setDisappearingMessagesTimer(DecryptedTimer.newBuilder().setDuration(decryptDisappearingMessagesTimer(group.getDisappearingMessagesTimer())))
@@ -289,18 +272,24 @@ public final class GroupsV2Operations {
     }
 
     /**
-     * @param verify You might want to avoid verification if you already know it's correct, or you
-     *               are not going to pass to other clients.
-     *               <p>
-     *               Also, if you know it's version 0, do not verify because changes for version 0
-     *               are not signed, but should be empty.
+     * @param verifySignature You might want to avoid verification if you already know it's correct, or you
+     *                        are not going to pass to other clients.
+     *                        <p>
+     *                        Also, if you know it's version 0, do not verify because changes for version 0
+     *                        are not signed, but should be empty.
+     * @return {@link Optional#absent} if the epoch for the change is higher that this code can decrypt.
      */
-    public DecryptedGroupChange decryptChange(GroupChange groupChange, boolean verify)
+    public Optional<DecryptedGroupChange> decryptChange(GroupChange groupChange, boolean verifySignature)
         throws InvalidProtocolBufferException, VerificationFailedException, InvalidGroupStateException
     {
-      GroupChange.Actions actions = verify ? getVerifiedActions(groupChange) : getActions(groupChange);
+      if (groupChange.getChangeEpoch() > HIGHEST_KNOWN_EPOCH) {
+        Log.w(TAG, String.format(Locale.US, "Ignoring change from Epoch %d. Highest known Epoch is %d", groupChange.getChangeEpoch(), HIGHEST_KNOWN_EPOCH));
+        return Optional.absent();
+      }
 
-      return decryptChange(actions);
+      GroupChange.Actions actions = verifySignature ? getVerifiedActions(groupChange) : getActions(groupChange);
+
+      return Optional.of(decryptChange(actions));
     }
 
     public DecryptedGroupChange decryptChange(GroupChange.Actions actions)
@@ -322,12 +311,12 @@ public final class GroupsV2Operations {
       }
 
       // Field 2
-      builder.setVersion(actions.getVersion());
+      builder.setRevision(actions.getRevision());
 
       // Field 3
       for (GroupChange.Actions.AddMemberAction addMemberAction : actions.getAddMembersList()) {
         try {
-          builder.addNewMembers(decryptMember(addMemberAction.getAdded()).setJoinedAtVersion(actions.getVersion()));
+          builder.addNewMembers(decryptMember(addMemberAction.getAdded()).setJoinedAtRevision(actions.getRevision()));
         } catch (InvalidInputException e) {
           throw new InvalidGroupStateException(e);
         }
@@ -354,7 +343,7 @@ public final class GroupsV2Operations {
           UUID uuid = decryptUuid(ByteString.copyFrom(presentation.getUuidCiphertext().serialize()));
           builder.addModifiedProfileKeys(DecryptedMember.newBuilder()
                                                         .setRole(Member.Role.UNKNOWN)
-                                                        .setJoinedAtVersion(-1)
+                                                        .setJoinedAtRevision(-1)
                                                         .setUuid(UuidUtil.toByteString(uuid))
                                                         .setProfileKey(ByteString.copyFrom(decryptProfileKey(ByteString.copyFrom(presentation.getProfileKeyCiphertext().serialize()), uuid).serialize())));
         } catch (InvalidInputException e) {
@@ -398,7 +387,7 @@ public final class GroupsV2Operations {
         UUID       uuid       = clientZkGroupCipher.decryptUuid(profileKeyCredentialPresentation.getUuidCiphertext());
         ProfileKey profileKey = clientZkGroupCipher.decryptProfileKey(profileKeyCredentialPresentation.getProfileKeyCiphertext(), uuid);
         builder.addPromotePendingMembers(DecryptedMember.newBuilder()
-                                                        .setJoinedAtVersion(-1)
+                                                        .setJoinedAtRevision(-1)
                                                         .setRole(Member.Role.DEFAULT)
                                                         .setUuid(UuidUtil.toByteString(uuid))
                                                         .setProfileKey(ByteString.copyFrom(profileKey.serialize())));
@@ -441,7 +430,7 @@ public final class GroupsV2Operations {
 
         return DecryptedMember.newBuilder()
                               .setUuid(UuidUtil.toByteString(uuid))
-                              .setJoinedAtVersion(member.getJoinedAtVersion())
+                              .setJoinedAtRevision(member.getJoinedAtRevision())
                               .setProfileKey(decryptProfileKeyToByteString(member.getProfileKey(), uuid))
                               .setRole(member.getRole());
       } else {
@@ -451,7 +440,7 @@ public final class GroupsV2Operations {
 
         return DecryptedMember.newBuilder()
                               .setUuid(UuidUtil.toByteString(uuid))
-                              .setJoinedAtVersion(member.getJoinedAtVersion())
+                              .setJoinedAtRevision(member.getJoinedAtRevision())
                               .setProfileKey(ByteString.copyFrom(profileKey.serialize()))
                               .setRole(member.getRole());
       }
@@ -489,7 +478,7 @@ public final class GroupsV2Operations {
       return ByteString.copyFrom(UUIDUtil.serialize(decryptUuid(userId)));
     }
 
-    private ByteString encryptUuid(UUID uuid) {
+    ByteString encryptUuid(UUID uuid) {
       return ByteString.copyFrom(clientZkGroupCipher.encryptUuid(uuid).serialize());
     }
 
@@ -523,7 +512,7 @@ public final class GroupsV2Operations {
     }
 
     private String decryptTitle(ByteString cipherText) {
-      return decryptBlob(cipherText).getTitle();
+      return decryptBlob(cipherText).getTitle().trim();
     }
 
     private int decryptDisappearingMessagesTimer(ByteString encryptedTimerMessage) {

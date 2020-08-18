@@ -14,7 +14,6 @@ import org.thoughtcrime.securesms.groups.GroupId;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.MessageGroupContext;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.thoughtcrime.securesms.recipients.RecipientForeverObserver;
 import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.messages.SignalServiceDataMessage;
@@ -41,9 +40,6 @@ public final class GroupUtil {
     if (groupContext.getGroupV1().isPresent()) {
       return GroupId.v1(groupContext.getGroupV1().get().getGroupId());
     } else if (groupContext.getGroupV2().isPresent()) {
-      if (!FeatureFlags.ZK_GROUPS) {
-        throw new BadGroupIdException();
-      }
       return GroupId.v2(groupContext.getGroupV2().get().getMasterKey());
     } else {
       throw new AssertionError();
@@ -70,13 +66,13 @@ public final class GroupUtil {
     return Optional.absent();
   }
 
-  public static @NonNull GroupDescription getDescription(@NonNull Context context, @Nullable String encodedGroup, boolean isV2) {
+  public static @NonNull GroupDescription getNonV2GroupDescription(@NonNull Context context, @Nullable String encodedGroup) {
     if (encodedGroup == null) {
       return new GroupDescription(context, null);
     }
 
     try {
-      MessageGroupContext groupContext = new MessageGroupContext(encodedGroup, isV2);
+      MessageGroupContext groupContext = new MessageGroupContext(encodedGroup, false);
       return new GroupDescription(context, groupContext);
     } catch (IOException e) {
       Log.w(TAG, e);
@@ -120,15 +116,16 @@ public final class GroupUtil {
       }
     }
 
-    public String toString(Recipient sender) {
+    @WorkerThread
+    public String toString(@NonNull Recipient sender) {
       StringBuilder description = new StringBuilder();
-      description.append(context.getString(R.string.MessageRecord_s_updated_group, sender.toShortString(context)));
+      description.append(context.getString(R.string.MessageRecord_s_updated_group, sender.getDisplayName(context)));
 
       if (groupContext == null) {
         return description.toString();
       }
 
-      String title = groupContext.getName();
+      String title = StringUtil.isolateBidi(groupContext.getName());
 
       if (members != null && members.size() > 0) {
         description.append("\n");
@@ -136,7 +133,7 @@ public final class GroupUtil {
                                                                     members.size(), toString(members)));
       }
 
-      if (title != null && !title.trim().isEmpty()) {
+      if (!title.trim().isEmpty()) {
         if (members != null) description.append(" ");
         else                 description.append("\n");
         description.append(context.getString(R.string.GroupUtil_group_name_is_now, title));
@@ -145,27 +142,11 @@ public final class GroupUtil {
       return description.toString();
     }
 
-    public void addObserver(RecipientForeverObserver listener) {
-      if (this.members != null) {
-        for (RecipientId member : this.members) {
-          Recipient.live(member).observeForever(listener);
-        }
-      }
-    }
-
-    public void removeObserver(RecipientForeverObserver listener) {
-      if (this.members != null) {
-        for (RecipientId member : this.members) {
-          Recipient.live(member).removeForeverObserver(listener);
-        }
-      }
-    }
-
     private String toString(List<RecipientId> recipients) {
       StringBuilder result = new StringBuilder();
 
       for (int i = 0; i < recipients.size(); i++) {
-        result.append(Recipient.live(recipients.get(i)).get().toShortString(context));
+        result.append(Recipient.live(recipients.get(i)).get().getDisplayName(context));
 
       if (i != recipients.size() -1 )
         result.append(", ");
