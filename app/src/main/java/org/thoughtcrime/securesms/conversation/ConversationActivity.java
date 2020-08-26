@@ -938,7 +938,9 @@ public class ConversationActivity extends PassphraseRequiredActivity
     case R.id.menu_conversation_settings:     handleConversationSettings();                      return true;
     case R.id.menu_expiring_messages_off:
     case R.id.menu_expiring_messages:         handleSelectMessageExpiration();                   return true;
-    case android.R.id.home:                   onNavigateUp();                                    return true;
+    case android.R.id.home:
+      setLast(getApplicationContext(),"");
+      onNavigateUp();                                    return true;
     }
 
     return false;
