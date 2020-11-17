@@ -2,27 +2,33 @@ package org.thoughtcrime.securesms.usernames.username;
 
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.Toolbar;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProviders;
+import androidx.navigation.Navigation;
 import androidx.navigation.fragment.NavHostFragment;
 
 import com.dd.CircularProgressButton;
 
+import org.thoughtcrime.securesms.LoggingFragment;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.contactshare.SimpleTextWatcher;
+import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.UsernameUtil;
 
-public class UsernameEditFragment extends Fragment {
+public class UsernameEditFragment extends LoggingFragment {
 
   private static final float DISABLED_ALPHA = 0.5f;
 
@@ -49,6 +55,10 @@ public class UsernameEditFragment extends Fragment {
     submitButton    = view.findViewById(R.id.username_submit_button);
     deleteButton    = view.findViewById(R.id.username_delete_button);
 
+    view.<Toolbar>findViewById(R.id.toolbar)
+        .setNavigationOnClickListener(v -> Navigation.findNavController(view)
+                                                     .popBackStack());
+
     viewModel = ViewModelProviders.of(this, new UsernameEditViewModel.Factory()).get(UsernameEditViewModel.class);
 
     viewModel.getUiState().observe(getViewLifecycleOwner(), this::onUiStateChanged);
@@ -57,12 +67,19 @@ public class UsernameEditFragment extends Fragment {
     submitButton.setOnClickListener(v -> viewModel.onUsernameSubmitted(usernameInput.getText().toString()));
     deleteButton.setOnClickListener(v -> viewModel.onUsernameDeleted());
 
-    usernameInput.setText(TextSecurePreferences.getLocalUsername(requireContext()));
+    usernameInput.setText(Recipient.self().getUsername().orNull());
     usernameInput.addTextChangedListener(new SimpleTextWatcher() {
       @Override
       public void onTextChanged(String text) {
         viewModel.onUsernameUpdated(text);
       }
+    });
+    usernameInput.setOnEditorActionListener((v, actionId, event) -> {
+      if (actionId == EditorInfo.IME_ACTION_DONE) {
+        viewModel.onUsernameSubmitted(usernameInput.getText().toString());
+        return true;
+      }
+      return false;
     });
   }
 

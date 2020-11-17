@@ -22,15 +22,22 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.view.ContextThemeWrapper;
+import androidx.core.util.Pair;
 import androidx.core.util.Supplier;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModelProviders;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import org.thoughtcrime.securesms.PassphraseRequiredActionBarActivity;
+import com.annimon.stream.Collectors;
+import com.annimon.stream.Stream;
+
+import org.thoughtcrime.securesms.PassphraseRequiredActivity;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.TransportOption;
 import org.thoughtcrime.securesms.TransportOptions;
@@ -42,10 +49,13 @@ import org.thoughtcrime.securesms.components.emoji.EmojiEditText;
 import org.thoughtcrime.securesms.components.emoji.EmojiKeyboardProvider;
 import org.thoughtcrime.securesms.components.emoji.EmojiToggle;
 import org.thoughtcrime.securesms.components.emoji.MediaKeyboard;
+import org.thoughtcrime.securesms.components.mention.MentionAnnotation;
 import org.thoughtcrime.securesms.contactshare.SimpleTextWatcher;
+import org.thoughtcrime.securesms.conversation.ui.mentions.MentionsPickerViewModel;
 import org.thoughtcrime.securesms.imageeditor.model.EditorModel;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mediapreview.MediaRailAdapter;
+import org.thoughtcrime.securesms.mediasend.MediaSendViewModel.HudState;
 import org.thoughtcrime.securesms.mediasend.MediaSendViewModel.ViewOnceState;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.permissions.Permissions;
@@ -61,7 +71,9 @@ import org.thoughtcrime.securesms.util.MediaUtil;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.Util;
+import org.thoughtcrime.securesms.util.ViewUtil;
 import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
+import org.thoughtcrime.securesms.util.livedata.LiveDataUtil;
 import org.thoughtcrime.securesms.util.views.SimpleProgressDialog;
 import org.thoughtcrime.securesms.util.views.Stub;
 import org.thoughtcrime.securesms.video.VideoUtil;
@@ -76,6 +88,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Encompasses the entire flow of sending media, starting from the selection process to the actual
@@ -84,7 +98,7 @@ import java.util.Map;
  * This activity is intended to be launched via {@link #startActivityForResult(Intent, int)}.
  * It will return the {@link Media} that the user decided to send.
  */
-public class MediaSendActivity extends PassphraseRequiredActionBarActivity implements MediaPickerFolderFragment.Controller,
+public class MediaSendActivity extends PassphraseRequiredActivity implements MediaPickerFolderFragment.Controller,
                                                                                       MediaPickerItemFragment.Controller,
                                                                                       ImageEditorFragment.Controller,
                                                                                       MediaSendVideoFragment.Controller,
@@ -113,8 +127,9 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
 
   private @Nullable LiveRecipient recipient;
 
-  private TransportOption    transport;
-  private MediaSendViewModel viewModel;
+  private TransportOption         transport;
+  private MediaSendViewModel      viewModel;
+  private MentionsPickerViewModel mentionsViewModel;
 
   private InputAwareLayout    hud;
   private View                captionAndRail;
@@ -130,6 +145,7 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
   private EmojiEditText       captionText;
   private EmojiToggle         emojiToggle;
   private Stub<MediaKeyboard> emojiDrawer;
+  private Stub<View>          mentionSuggestions;
   private TextView            charactersLeft;
   private RecyclerView        mediaRail;
   private MediaRailAdapter    mediaRailAdapter;
@@ -142,7 +158,7 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
   /**
    * Get an intent to launch the media send flow starting with the picker.
    */
-  public static Intent buildGalleryIntent(@NonNull Context context, @NonNull Recipient recipient, @Nullable String body, @NonNull TransportOption transport) {
+  public static Intent buildGalleryIntent(@NonNull Context context, @NonNull Recipient recipient, @Nullable CharSequence body, @NonNull TransportOption transport) {
     Intent intent = new Intent(context, MediaSendActivity.class);
     intent.putExtra(KEY_RECIPIENT, recipient.getId());
     intent.putExtra(KEY_TRANSPORT, transport);
@@ -174,12 +190,18 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
   public static Intent buildEditorIntent(@NonNull Context context,
                                          @NonNull List<Media> media,
                                          @NonNull Recipient recipient,
-                                         @NonNull String body,
+                                         @NonNull CharSequence body,
                                          @NonNull TransportOption transport)
   {
     Intent intent = buildGalleryIntent(context, recipient, body, transport);
     intent.putParcelableArrayListExtra(KEY_MEDIA, new ArrayList<>(media));
     return intent;
+  }
+
+  @Override
+  protected void attachBaseContext(@NonNull Context newBase) {
+    getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+    super.attachBaseContext(newBase);
   }
 
   @Override
@@ -207,6 +229,7 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
     charactersLeft      = findViewById(R.id.mediasend_characters_left);
     mediaRail           = findViewById(R.id.mediasend_media_rail);
     emojiDrawer         = new Stub<>(findViewById(R.id.mediasend_emoji_drawer_stub));
+    mentionSuggestions  = new Stub<>(findViewById(R.id.mediasend_mention_suggestions_stub));
 
     RecipientId recipientId = getIntent().getParcelableExtra(KEY_RECIPIENT);
     if (recipientId != null) {
@@ -222,7 +245,7 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
 
     viewModel.setTransport(transport);
     viewModel.setRecipient(recipient != null ? recipient.get() : null);
-    viewModel.onBodyChanged(getIntent().getStringExtra(KEY_BODY));
+    viewModel.onBodyChanged(getIntent().getCharSequenceExtra(KEY_BODY));
 
     List<Media> media    = getIntent().getParcelableArrayListExtra(KEY_MEDIA);
     boolean     isCamera = getIntent().getBooleanExtra(KEY_IS_CAMERA, false);
@@ -308,6 +331,7 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
       emojiToggle.setOnClickListener(this::onEmojiToggleClicked);
     }
 
+    initializeMentionsViewModel();
     initViewModel();
 
     revealButton.setOnClickListener(v -> viewModel.onRevealButtonToggled());
@@ -319,6 +343,9 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
     MediaSendFragment sendFragment  = (MediaSendFragment) getSupportFragmentManager().findFragmentByTag(TAG_SEND);
 
     if (sendFragment == null || !sendFragment.isVisible() || !hud.isInputOpen()) {
+      if (captionAndRail != null) {
+        captionAndRail.setVisibility(View.VISIBLE);
+      }
       super.onBackPressed();
     } else {
       hud.hideCurrentInput(composeText);
@@ -408,21 +435,20 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
         long length = getLength.apply(data);
 
         Uri uri = createBlobBuilder.apply(BlobProvider.getInstance(), data, length)
-            .withMimeType(mimeType)
-            .createForSingleSessionOnDisk(this);
+                                   .withMimeType(mimeType)
+                                   .createForSingleSessionOnDisk(this);
 
-        return new Media(
-            uri,
-            mimeType,
-            System.currentTimeMillis(),
-            width,
-            height,
-            length,
-            0,
-            Optional.of(Media.ALL_MEDIA_BUCKET_ID),
-            Optional.absent(),
-            Optional.absent()
-        );
+        return new Media(uri,
+                         mimeType,
+                         System.currentTimeMillis(),
+                         width,
+                         height,
+                         length,
+                         0,
+                         false,
+                         Optional.of(Media.ALL_MEDIA_BUCKET_ID),
+                         Optional.absent(),
+                         Optional.absent());
       } catch (IOException e) {
         return null;
       }
@@ -523,7 +549,7 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
     MediaSendFragment fragment = getMediaSendFragment();
 
     if (fragment != null) {
-      viewModel.onSendClicked(buildModelsToTransform(fragment), recipients).observe(this, result -> {
+      viewModel.onSendClicked(buildModelsToTransform(fragment), recipients, composeText.getMentions()).observe(this, result -> {
         finish();
       });
     } else {
@@ -544,7 +570,7 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
 
     sendButton.setEnabled(false);
 
-    viewModel.onSendClicked(buildModelsToTransform(fragment), Collections.emptyList()).observe(this, this::setActivityResultAndFinish);
+    viewModel.onSendClicked(buildModelsToTransform(fragment), Collections.emptyList(), composeText.getMentions()).observe(this, this::setActivityResultAndFinish);
   }
 
   private static Map<Media, MediaTransform> buildModelsToTransform(@NonNull MediaSendFragment fragment) {
@@ -598,24 +624,33 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
   }
 
   private void initViewModel() {
+    LiveData<Pair<HudState, Boolean>> hudStateAndMentionShowing = LiveDataUtil.combineLatest(viewModel.getHudState(),
+                                                                                             mentionsViewModel != null ? mentionsViewModel.isShowing()
+                                                                                                                       : new MutableLiveData<>(false),
+                                                                                             Pair::new);
+
+    hudStateAndMentionShowing.observe(this, p -> {
+      HudState state                  = Objects.requireNonNull(p.first);
+      boolean  isMentionPickerShowing = Objects.requireNonNull(p.second);
+      int      captionBackground      = R.color.transparent_black_40;
+
+      if (state.getRailState() == MediaSendViewModel.RailState.VIEWABLE) {
+        captionBackground = R.color.core_grey_90;
+      } else if (state.getViewOnceState() == ViewOnceState.ENABLED) {
+        captionBackground = 0;
+      } else if (isMentionPickerShowing){
+        captionBackground = R.color.signal_background_dialog;
+      }
+
+      captionAndRail.setBackgroundResource(captionBackground);
+    });
+
     viewModel.getHudState().observe(this, state -> {
       if (state == null) return;
 
       hud.setVisibility(state.isHudVisible() ? View.VISIBLE : View.GONE);
       composeContainer.setVisibility(state.isComposeVisible() ? View.VISIBLE : (state.getViewOnceState() == ViewOnceState.GONE ? View.GONE : View.INVISIBLE));
       captionText.setVisibility(state.isCaptionVisible() ? View.VISIBLE : View.GONE);
-
-      int captionBackground;
-
-      if (state.getRailState() == MediaSendViewModel.RailState.VIEWABLE) {
-        captionBackground = R.color.core_grey_90;
-      } else if (state.getViewOnceState() == ViewOnceState.ENABLED) {
-        captionBackground = 0;
-      } else {
-        captionBackground = R.color.transparent_black_40;
-      }
-
-      captionAndRail.setBackgroundResource(captionBackground);
 
       switch (state.getButtonState()) {
         case SEND:
@@ -715,6 +750,10 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
         case ITEM_TOO_LARGE:
           Toast.makeText(this, R.string.MediaSendActivity_an_item_was_removed_because_it_exceeded_the_size_limit, Toast.LENGTH_LONG).show();
           break;
+        case ONLY_ITEM_TOO_LARGE:
+          Toast.makeText(this, R.string.MediaSendActivity_an_item_was_removed_because_it_exceeded_the_size_limit, Toast.LENGTH_LONG).show();
+          onNoMediaAvailable();
+          break;
         case TOO_MANY_ITEMS:
           int maxSelection = viewModel.getMaxSelection();
           Toast.makeText(this, getResources().getQuantityString(R.plurals.MediaSendActivity_cant_share_more_than_n_items, maxSelection, maxSelection), Toast.LENGTH_SHORT).show();
@@ -745,10 +784,57 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
     });
   }
 
+  private void initializeMentionsViewModel() {
+    if (recipient == null) {
+      return;
+    }
+
+    mentionsViewModel = ViewModelProviders.of(this, new MentionsPickerViewModel.Factory()).get(MentionsPickerViewModel.class);
+
+    recipient.observe(this, mentionsViewModel::onRecipientChange);
+    composeText.setMentionQueryChangedListener(query -> {
+      if (recipient.get().isPushV2Group()) {
+        if (!mentionSuggestions.resolved()) {
+          mentionSuggestions.get();
+        }
+        mentionsViewModel.onQueryChange(query);
+      }
+    });
+
+    composeText.setMentionValidator(annotations -> {
+      if (!recipient.get().isPushV2Group()) {
+        return annotations;
+      }
+
+      Set<String> validRecipientIds = Stream.of(recipient.get().getParticipants())
+                                            .map(r -> MentionAnnotation.idToMentionAnnotationValue(r.getId()))
+                                            .collect(Collectors.toSet());
+
+      return Stream.of(annotations)
+                   .filter(a -> !validRecipientIds.contains(a.getValue()))
+                   .toList();
+    });
+
+    mentionsViewModel.getSelectedRecipient().observe(this, recipient -> {
+      composeText.replaceTextWithMention(recipient.getDisplayName(this), recipient.getId());
+    });
+
+    MentionPickerPlacer mentionPickerPlacer = new MentionPickerPlacer();
+
+    mentionsViewModel.isShowing().observe(this, isShowing -> {
+      if (isShowing) {
+        composeRow.getViewTreeObserver().addOnGlobalLayoutListener(mentionPickerPlacer);
+      } else {
+        composeRow.getViewTreeObserver().removeOnGlobalLayoutListener(mentionPickerPlacer);
+      }
+      mentionPickerPlacer.onGlobalLayout();
+    });
+  }
+
   private void presentRecipient(@Nullable Recipient recipient) {
     if (recipient == null) {
       composeText.setHint(R.string.MediaSendActivity_message);
-    } else if (recipient.isLocalNumber()) {
+    } else if (recipient.isSelf()) {
       composeText.setHint(getString(R.string.note_to_self), null);
     } else {
       composeText.setHint(getString(R.string.MediaSendActivity_message_to_s, recipient.getDisplayName(this)), null);
@@ -776,7 +862,7 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
     Permissions.with(this)
                .request(Manifest.permission.CAMERA)
                .ifNecessary()
-               .withRationaleDialog(getString(R.string.ConversationActivity_to_capture_photos_and_video_allow_signal_access_to_the_camera), R.drawable.ic_camera_solid_24)
+               .withRationaleDialog(getString(R.string.ConversationActivity_to_capture_photos_and_video_allow_signal_access_to_the_camera), R.drawable.ic_camera_24)
                .withPermanentDenialDialog(getString(R.string.ConversationActivity_signal_needs_the_camera_permission_to_take_photos_or_video))
                .onAllGranted(() -> {
                  Fragment fragment = getOrCreateCameraFragment();
@@ -830,9 +916,9 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
 
 
   private void presentCharactersRemaining() {
-    String          messageBody     = composeText.getTextTrimmed();
+    String          messageBody     = composeText.getTextTrimmed().toString();
     TransportOption transportOption = sendButton.getSelectedTransport();
-    CharacterState characterState  = transportOption.calculateCharacters(messageBody);
+    CharacterState  characterState  = transportOption.calculateCharacters(messageBody);
 
     if (characterState.charactersRemaining <= 15 || characterState.messagesSpent > 1) {
       charactersLeft.setText(String.format(Locale.getDefault(),
@@ -922,5 +1008,35 @@ public class MediaSendActivity extends PassphraseRequiredActionBarActivity imple
 
     @Override
     public void onFocusChange(View v, boolean hasFocus) {}
+  }
+
+  private class MentionPickerPlacer implements ViewTreeObserver.OnGlobalLayoutListener {
+
+    private final int       composeMargin;
+    private final ViewGroup parent;
+    private final Rect      composeCoordinates;
+    private       int       previousBottomMargin;
+
+    public MentionPickerPlacer() {
+      parent             = findViewById(android.R.id.content);
+      composeMargin      = ViewUtil.dpToPx(12);
+      composeCoordinates = new Rect();
+    }
+
+    @Override
+    public void onGlobalLayout() {
+      composeRow.getDrawingRect(composeCoordinates);
+      parent.offsetDescendantRectToMyCoords(composeRow, composeCoordinates);
+
+      int marginBottom = parent.getHeight() - composeCoordinates.top + composeMargin;
+
+      if (marginBottom != previousBottomMargin) {
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) mentionSuggestions.get().getLayoutParams();
+        params.setMargins(0, 0, 0, marginBottom);
+        mentionSuggestions.get().setLayoutParams(params);
+
+        previousBottomMargin = marginBottom;
+      }
+    }
   }
 }

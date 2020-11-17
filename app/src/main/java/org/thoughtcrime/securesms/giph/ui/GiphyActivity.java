@@ -6,7 +6,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
 
 import androidx.annotation.ColorInt;
@@ -19,25 +18,25 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentPagerAdapter;
 import androidx.viewpager.widget.ViewPager;
+
 import org.thoughtcrime.securesms.logging.Log;
 import android.view.View;
-import android.widget.LinearLayout;
 import android.widget.Toast;
 
-import org.thoughtcrime.securesms.PassphraseRequiredActionBarActivity;
+import org.thoughtcrime.securesms.PassphraseRequiredActivity;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.providers.BlobProvider;
 import org.thoughtcrime.securesms.util.DynamicDarkToolbarTheme;
 import org.thoughtcrime.securesms.util.DynamicLanguage;
-import org.thoughtcrime.securesms.util.DynamicNoActionBarTheme;
 import org.thoughtcrime.securesms.util.DynamicTheme;
 import org.thoughtcrime.securesms.util.MediaUtil;
 import org.thoughtcrime.securesms.util.ViewUtil;
+import org.thoughtcrime.securesms.util.WindowUtil;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 
-public class GiphyActivity extends PassphraseRequiredActionBarActivity
+public class GiphyActivity extends PassphraseRequiredActivity
     implements GiphyActivityToolbar.OnLayoutChangedListener,
                GiphyActivityToolbar.OnFilterChangedListener,
                GiphyAdapter.OnItemClickListener
@@ -45,10 +44,11 @@ public class GiphyActivity extends PassphraseRequiredActionBarActivity
 
   private static final String TAG = GiphyActivity.class.getSimpleName();
 
-  public static final String EXTRA_IS_MMS = "extra_is_mms";
-  public static final String EXTRA_WIDTH  = "extra_width";
-  public static final String EXTRA_HEIGHT = "extra_height";
-  public static final String EXTRA_COLOR  = "extra_color";
+  public static final String EXTRA_IS_MMS     = "extra_is_mms";
+  public static final String EXTRA_WIDTH      = "extra_width";
+  public static final String EXTRA_HEIGHT     = "extra_height";
+  public static final String EXTRA_COLOR      = "extra_color";
+  public static final String EXTRA_BORDERLESS = "extra_borderless";
 
   private final DynamicTheme    dynamicTheme    = new DynamicDarkToolbarTheme();
   private final DynamicLanguage dynamicLanguage = new DynamicLanguage();
@@ -82,7 +82,7 @@ public class GiphyActivity extends PassphraseRequiredActionBarActivity
 
     final int conversationColor = getConversationColor();
     toolbar.setBackgroundColor(conversationColor);
-    setStatusBarColor(conversationColor);
+    WindowUtil.setStatusBarColor(getWindow(), conversationColor);
 
     setSupportActionBar(toolbar);
 
@@ -154,6 +154,7 @@ public class GiphyActivity extends PassphraseRequiredActionBarActivity
           intent.setData(uri);
           intent.putExtra(EXTRA_WIDTH, viewHolder.image.getGifWidth());
           intent.putExtra(EXTRA_HEIGHT, viewHolder.image.getGifHeight());
+          intent.putExtra(EXTRA_BORDERLESS, viewHolder.image.isSticker());
           setResult(RESULT_OK, intent);
           finish();
         } else {

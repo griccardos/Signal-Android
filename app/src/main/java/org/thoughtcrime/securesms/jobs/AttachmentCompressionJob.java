@@ -145,12 +145,16 @@ public final class AttachmentCompressionJob extends BaseJob {
         if (!constraints.isSatisfied(context, attachment)) {
           throw new UndeliverableMessageException("Size constraints could not be met on video!");
         }
+      } else if (MediaUtil.isHeic(attachment) || MediaUtil.isHeif(attachment)) {
+        MediaStream converted = getResizedMedia(context, attachment, constraints);
+        attachmentDatabase.updateAttachmentData(attachment, converted, false);
+        attachmentDatabase.markAttachmentAsTransformed(attachmentId);
       } else if (constraints.isSatisfied(context, attachment)) {
         if (MediaUtil.isJpeg(attachment)) {
           MediaStream stripped = getResizedMedia(context, attachment, constraints);
           attachmentDatabase.updateAttachmentData(attachment, stripped, false);
-          attachmentDatabase.markAttachmentAsTransformed(attachmentId);
         }
+        attachmentDatabase.markAttachmentAsTransformed(attachmentId);
       } else if (constraints.canResize(attachment)) {
         MediaStream resized = getResizedMedia(context, attachment, constraints);
         attachmentDatabase.updateAttachmentData(attachment, resized, false);
@@ -245,7 +249,7 @@ public final class AttachmentCompressionJob extends BaseJob {
 
     try {
       BitmapUtil.ScaleResult scaleResult = BitmapUtil.createScaledBytes(context,
-                                                                        new DecryptableStreamUriLoader.DecryptableUri(attachment.getDataUri()),
+                                                                        new DecryptableStreamUriLoader.DecryptableUri(attachment.getUri()),
                                                                         constraints);
 
       return new MediaStream(new ByteArrayInputStream(scaleResult.getBitmap()),

@@ -35,21 +35,15 @@ import org.thoughtcrime.securesms.util.ResUtil;
 public class AudioSlide extends Slide {
 
   public AudioSlide(Context context, Uri uri, long dataSize, boolean voiceNote) {
-    super(context, constructAttachmentFromUri(context, uri, MediaUtil.AUDIO_UNSPECIFIED, dataSize, 0, 0, false, null, null, null, null, voiceNote, false));
+    super(context, constructAttachmentFromUri(context, uri, MediaUtil.AUDIO_UNSPECIFIED, dataSize, 0, 0, false, null, null, null, null, null, voiceNote, false, false));
   }
 
   public AudioSlide(Context context, Uri uri, long dataSize, String contentType, boolean voiceNote) {
-    super(context,  new UriAttachment(uri, null, contentType, AttachmentDatabase.TRANSFER_PROGRESS_STARTED, dataSize, 0, 0, null, null, voiceNote, false, null, null, null, null));
+    super(context,  new UriAttachment(uri, contentType, AttachmentDatabase.TRANSFER_PROGRESS_STARTED, dataSize, 0, 0, null, null, voiceNote, false, false, null, null, null, null, null));
   }
 
   public AudioSlide(Context context, Attachment attachment) {
     super(context, attachment);
-  }
-
-  @Override
-  @Nullable
-  public Uri getThumbnailUri() {
-    return null;
   }
 
   @Override
@@ -59,7 +53,7 @@ public class AudioSlide extends Slide {
 
   @Override
   public boolean hasImage() {
-    return true;
+    return false;
   }
 
   @Override
@@ -75,6 +69,6 @@ public class AudioSlide extends Slide {
 
   @Override
   public @DrawableRes int getPlaceholderRes(Theme theme) {
-    return ResUtil.getDrawableRes(theme, R.attr.conversation_icon_attach_audio);
+    return R.drawable.ic_audio;
   }
 }

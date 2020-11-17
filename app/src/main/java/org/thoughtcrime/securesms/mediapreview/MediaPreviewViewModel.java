@@ -98,8 +98,7 @@ public class MediaPreviewViewModel extends ViewModel {
   }
 
   private @Nullable Media toMedia(@NonNull MediaRecord mediaRecord) {
-    Uri uri = mediaRecord.getAttachment().getThumbnailUri() != null ? mediaRecord.getAttachment().getThumbnailUri()
-                                                                    : mediaRecord.getAttachment().getDataUri();
+    Uri uri = mediaRecord.getAttachment().getUri();
 
     if (uri == null) {
       return null;
@@ -112,6 +111,7 @@ public class MediaPreviewViewModel extends ViewModel {
                      mediaRecord.getAttachment().getHeight(),
                      mediaRecord.getAttachment().getSize(),
                      0,
+                     mediaRecord.getAttachment().isBorderless(),
                      Optional.absent(),
                      Optional.fromNullable(mediaRecord.getAttachment().getCaption()),
                      Optional.absent());

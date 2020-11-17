@@ -19,6 +19,7 @@ package org.thoughtcrime.securesms.database;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -26,8 +27,10 @@ import net.sqlcipher.database.SQLiteDatabase;
 
 import org.greenrobot.eventbus.EventBus;
 import org.thoughtcrime.securesms.database.helpers.SQLCipherOpenHelper;
+import org.thoughtcrime.securesms.database.identity.IdentityRecordList;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientId;
+import org.thoughtcrime.securesms.tracing.Trace;
 import org.thoughtcrime.securesms.util.Base64;
 import org.thoughtcrime.securesms.util.IdentityUtil;
 import org.whispersystems.libsignal.IdentityKey;
@@ -35,7 +38,10 @@ import org.whispersystems.libsignal.InvalidKeyException;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.io.IOException;
+import java.util.LinkedList;
+import java.util.List;
 
+@Trace
 public class IdentityDatabase extends Database {
 
   @SuppressWarnings("unused")
@@ -111,6 +117,31 @@ public class IdentityDatabase extends Database {
     return Optional.absent();
   }
 
+  public @NonNull IdentityRecordList getIdentities(@NonNull List<Recipient> recipients) {
+    List<IdentityRecord> records       = new LinkedList<>();
+    SQLiteDatabase       database      = databaseHelper.getReadableDatabase();
+    String[]             selectionArgs = new String[1];
+
+    database.beginTransaction();
+    try {
+      for (Recipient recipient : recipients) {
+        selectionArgs[0] = recipient.getId().serialize();
+
+        try (Cursor cursor = database.query(TABLE_NAME, null, RECIPIENT_ID + " = ?", selectionArgs, null, null, null)) {
+          if (cursor.moveToFirst()) {
+            records.add(getIdentityRecord(cursor));
+          }
+        } catch (InvalidKeyException | IOException e) {
+          throw new AssertionError(e);
+        }
+      }
+    } finally {
+      database.endTransaction();
+    }
+
+    return new IdentityRecordList(records);
+  }
+
   public void saveIdentity(@NonNull RecipientId recipientId, IdentityKey identityKey, VerifiedStatus verifiedStatus,
                            boolean firstUse, long timestamp, boolean nonBlockingApproval)
   {
@@ -151,7 +182,7 @@ public class IdentityDatabase extends Database {
     boolean statusMatches = keyMatches && hasMatchingStatus(id, identityKey, verifiedStatus);
 
     if (!keyMatches || !statusMatches) {
-      saveIdentityInternal(id, identityKey, verifiedStatus, false, System.currentTimeMillis(), true);
+      saveIdentityInternal(id, identityKey, verifiedStatus, !hadEntry, System.currentTimeMillis(), true);
       Optional<IdentityRecord> record = getIdentity(id);
       if (record.isPresent()) EventBus.getDefault().post(record.get());
     }
@@ -181,7 +212,7 @@ public class IdentityDatabase extends Database {
     }
   }
 
-  private IdentityRecord getIdentityRecord(@NonNull Cursor cursor) throws IOException, InvalidKeyException {
+  private static @NonNull IdentityRecord getIdentityRecord(@NonNull Cursor cursor) throws IOException, InvalidKeyException {
     long        recipientId         = cursor.getLong(cursor.getColumnIndexOrThrow(RECIPIENT_ID));
     String      serializedIdentity  = cursor.getString(cursor.getColumnIndexOrThrow(IDENTITY_KEY));
     long        timestamp           = cursor.getLong(cursor.getColumnIndexOrThrow(TIMESTAMP));

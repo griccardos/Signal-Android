@@ -9,15 +9,16 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.TextUtils;
+
 import androidx.annotation.Nullable;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
-import android.text.TextUtils;
 
 import org.thoughtcrime.securesms.ApplicationPreferencesActivity;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.SwitchPreferenceCompat;
-import org.thoughtcrime.securesms.notifications.MessageNotifier;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.notifications.NotificationChannels;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 
@@ -211,7 +212,7 @@ public class NotificationsPreferenceFragment extends ListSummaryPreferenceFragme
       new AsyncTask<Void, Void, Void>() {
         @Override
         protected Void doInBackground(Void... params) {
-          MessageNotifier.updateNotification(getActivity());
+          ApplicationDependencies.getMessageNotifier().updateNotification(getActivity());
           return null;
         }
       }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);

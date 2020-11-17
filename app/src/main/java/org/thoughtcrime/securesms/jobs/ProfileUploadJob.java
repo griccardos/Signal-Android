@@ -11,20 +11,23 @@ import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.jobmanager.Job;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
+import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.profiles.AvatarHelper;
 import org.thoughtcrime.securesms.profiles.ProfileName;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.thoughtcrime.securesms.util.FeatureFlags;
-import org.thoughtcrime.securesms.util.ProfileUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.whispersystems.signalservice.api.SignalServiceAccountManager;
-import org.whispersystems.signalservice.api.profiles.ProfileAndCredential;
-import org.whispersystems.signalservice.api.profiles.SignalServiceProfile;
 import org.whispersystems.signalservice.api.util.StreamDetails;
+
+import java.util.concurrent.TimeUnit;
 
 public final class ProfileUploadJob extends BaseJob {
 
+  private static final String TAG = Log.tag(ProfileUploadJob.class);
+
   public static final String KEY = "ProfileUploadJob";
+
+  public static final String QUEUE = "ProfileAlteration";
 
   private final Context                     context;
   private final SignalServiceAccountManager accountManager;
@@ -32,10 +35,10 @@ public final class ProfileUploadJob extends BaseJob {
   public ProfileUploadJob() {
     this(new Job.Parameters.Builder()
                             .addConstraint(NetworkConstraint.KEY)
-                            .setQueue(KEY)
-                            .setLifespan(Parameters.IMMORTAL)
+                            .setQueue(QUEUE)
+                            .setLifespan(TimeUnit.DAYS.toMillis(30))
                             .setMaxAttempts(Parameters.UNLIMITED)
-                            .setMaxInstances(1)
+                            .setMaxInstances(2)
                             .build());
   }
 
@@ -48,17 +51,17 @@ public final class ProfileUploadJob extends BaseJob {
 
   @Override
   protected void onRun() throws Exception {
+    if (!TextSecurePreferences.isPushRegistered(context)) {
+      Log.w(TAG, "Not registered. Skipping.");
+      return;
+    }
+
     ProfileKey  profileKey  = ProfileKeyUtil.getSelfProfileKey();
     ProfileName profileName = Recipient.self().getProfileName();
-    String      avatarPath  = null;
+    String      avatarPath;
 
     try (StreamDetails avatar = AvatarHelper.getSelfProfileAvatarStream(context)) {
-      if (FeatureFlags.VERSIONED_PROFILES) {
-        avatarPath = accountManager.setVersionedProfile(Recipient.self().getUuid().get(), profileKey, profileName.serialize(), avatar).orNull();
-      } else {
-        accountManager.setProfileName(profileKey, profileName.serialize());
-        avatarPath = accountManager.setProfileAvatar(profileKey, avatar).orNull();
-      }
+      avatarPath = accountManager.setVersionedProfile(Recipient.self().getUuid().get(), profileKey, profileName.serialize(), avatar).orNull();
     }
 
     DatabaseFactory.getRecipientDatabase(context).setProfileAvatar(Recipient.self().getId(), avatarPath);
@@ -83,11 +86,10 @@ public final class ProfileUploadJob extends BaseJob {
   public void onFailure() {
   }
 
-  public static class Factory implements Job.Factory {
+  public static class Factory implements Job.Factory<ProfileUploadJob> {
 
-    @NonNull
     @Override
-    public Job create(@NonNull Parameters parameters, @NonNull Data data) {
+    public @NonNull ProfileUploadJob create(@NonNull Parameters parameters, @NonNull Data data) {
       return new ProfileUploadJob(parameters);
     }
   }

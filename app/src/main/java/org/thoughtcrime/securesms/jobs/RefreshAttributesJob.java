@@ -17,6 +17,7 @@ import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.whispersystems.signalservice.api.SignalServiceAccountManager;
 import org.whispersystems.signalservice.api.crypto.UnidentifiedAccess;
 import org.whispersystems.signalservice.api.push.exceptions.NetworkFailureException;
+import org.whispersystems.signalservice.api.account.AccountAttributes;
 
 import java.io.IOException;
 
@@ -30,6 +31,7 @@ public class RefreshAttributesJob extends BaseJob {
     this(new Job.Parameters.Builder()
                            .addConstraint(NetworkConstraint.KEY)
                            .setQueue("RefreshAttributesJob")
+                           .setMaxInstances(2)
                            .build());
   }
 
@@ -69,13 +71,23 @@ public class RefreshAttributesJob extends BaseJob {
       registrationLockV1 = TextSecurePreferences.getDeprecatedV1RegistrationLockPin(context);
     }
 
-    Log.i(TAG, "Calling setAccountAttributes() reglockV1? " + !TextUtils.isEmpty(registrationLockV1) + ", reglockV2? " + !TextUtils.isEmpty(registrationLockV2) + ", pin? " + kbsValues.hasPin());
+    boolean phoneNumberDiscoverable = SignalStore.phoneNumberPrivacy().getPhoneNumberListingMode().isDiscoverable();
+
+    AccountAttributes.Capabilities capabilities = AppCapabilities.getCapabilities(kbsValues.hasPin() && !kbsValues.hasOptedOut());
+    Log.i(TAG, "Calling setAccountAttributes() reglockV1? " + !TextUtils.isEmpty(registrationLockV1) + ", reglockV2? " + !TextUtils.isEmpty(registrationLockV2) + ", pin? " + kbsValues.hasPin() +
+               "\n    Phone number discoverable : " + phoneNumberDiscoverable +
+               "\n  Capabilities:" +
+               "\n    Storage? " + capabilities.isStorage() +
+               "\n    GV2? " + capabilities.isGv2() +
+               "\n    GV1 Migration? " + capabilities.isGv1Migration() +
+               "\n    UUID? " + capabilities.isUuid());
 
     SignalServiceAccountManager signalAccountManager = ApplicationDependencies.getSignalServiceAccountManager();
     signalAccountManager.setAccountAttributes(null, registrationId, fetchesMessages,
                                               registrationLockV1, registrationLockV2,
                                               unidentifiedAccessKey, universalUnidentifiedAccess,
-                                              AppCapabilities.getCapabilities(kbsValues.hasPin()));
+                                              capabilities,
+                                              phoneNumberDiscoverable);
   }
 
   @Override

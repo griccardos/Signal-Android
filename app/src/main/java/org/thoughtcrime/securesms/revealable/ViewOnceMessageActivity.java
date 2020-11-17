@@ -13,9 +13,10 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.lifecycle.ViewModelProviders;
 
-import org.thoughtcrime.securesms.PassphraseRequiredActionBarActivity;
+import org.thoughtcrime.securesms.PassphraseRequiredActivity;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader.DecryptableUri;
@@ -24,12 +25,11 @@ import org.thoughtcrime.securesms.mms.PartAuthority;
 import org.thoughtcrime.securesms.mms.VideoSlide;
 import org.thoughtcrime.securesms.providers.BlobProvider;
 import org.thoughtcrime.securesms.util.MediaUtil;
-import org.thoughtcrime.securesms.util.ViewUtil;
 import org.thoughtcrime.securesms.video.VideoPlayer;
 
 import java.util.concurrent.TimeUnit;
 
-public class ViewOnceMessageActivity extends PassphraseRequiredActionBarActivity implements VideoPlayer.PlayerStateCallback {
+public class ViewOnceMessageActivity extends PassphraseRequiredActivity implements VideoPlayer.PlayerStateCallback {
 
   private static final String TAG = Log.tag(ViewOnceMessageActivity.class);
 
@@ -58,6 +58,12 @@ public class ViewOnceMessageActivity extends PassphraseRequiredActionBarActivity
     intent.putExtra(KEY_MESSAGE_ID, messageId);
     intent.putExtra(KEY_URI, uri);
     return intent;
+  }
+
+  @Override
+  protected void attachBaseContext(@NonNull Context newBase) {
+    getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+    super.attachBaseContext(newBase);
   }
 
   @Override

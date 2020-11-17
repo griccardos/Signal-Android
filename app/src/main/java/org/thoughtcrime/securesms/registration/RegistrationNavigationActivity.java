@@ -8,6 +8,7 @@ import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 
 import com.google.android.gms.auth.api.phone.SmsRetriever;
 import com.google.android.gms.common.api.CommonStatusCodes;
@@ -37,6 +38,12 @@ public final class RegistrationNavigationActivity extends AppCompatActivity {
     Intent intent = new Intent(context, RegistrationNavigationActivity.class);
     intent.putExtra(RE_REGISTRATION_EXTRA, true);
     return intent;
+  }
+
+  @Override
+  protected void attachBaseContext(@NonNull Context newBase) {
+    getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+    super.attachBaseContext(newBase);
   }
 
   @Override
@@ -77,7 +84,7 @@ public final class RegistrationNavigationActivity extends AppCompatActivity {
 
         switch (status.getStatusCode()) {
           case CommonStatusCodes.SUCCESS:
-            Optional<String> code = VerificationCodeParser.parse(context, (String) extras.get(SmsRetriever.EXTRA_SMS_MESSAGE));
+            Optional<String> code = VerificationCodeParser.parse((String) extras.get(SmsRetriever.EXTRA_SMS_MESSAGE));
             if (code.isPresent()) {
               Log.i(TAG, "Received verification code.");
               handleVerificationCodeReceived(code.get());

@@ -78,6 +78,10 @@ public abstract class DisplayRecord {
            !MmsSmsColumns.Types.isIdentityDefault(type);
   }
 
+  public boolean isSent() {
+    return MmsSmsColumns.Types.isSentType(type);
+  }
+
   public boolean isOutgoing() {
     return MmsSmsColumns.Types.isOutgoingMessageType(type);
   }
@@ -136,20 +140,36 @@ public abstract class DisplayRecord {
     return SmsDatabase.Types.isJoinedType(type);
   }
 
-  public boolean isIncomingCall() {
-    return SmsDatabase.Types.isIncomingCall(type);
+  public boolean isIncomingAudioCall() {
+    return SmsDatabase.Types.isIncomingAudioCall(type);
   }
 
-  public boolean isOutgoingCall() {
-    return SmsDatabase.Types.isOutgoingCall(type);
+  public boolean isIncomingVideoCall() {
+    return SmsDatabase.Types.isIncomingVideoCall(type);
   }
 
-  public boolean isMissedCall() {
-    return SmsDatabase.Types.isMissedCall(type);
+  public boolean isOutgoingAudioCall() {
+    return SmsDatabase.Types.isOutgoingAudioCall(type);
+  }
+
+  public boolean isOutgoingVideoCall() {
+    return SmsDatabase.Types.isOutgoingVideoCall(type);
+  }
+
+  public final boolean isMissedAudioCall() {
+    return SmsDatabase.Types.isMissedAudioCall(type);
+  }
+
+  public final boolean isMissedVideoCall() {
+    return SmsDatabase.Types.isMissedVideoCall(type);
   }
 
   public boolean isVerificationStatusChange() {
     return SmsDatabase.Types.isIdentityDefault(type) || SmsDatabase.Types.isIdentityVerified(type);
+  }
+
+  public boolean isProfileChange() {
+    return SmsDatabase.Types.isProfileChange(type);
   }
 
   public int getDeliveryStatus() {

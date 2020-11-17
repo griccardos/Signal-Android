@@ -9,7 +9,7 @@ import com.annimon.stream.Stream;
 
 import org.thoughtcrime.securesms.crypto.UnidentifiedAccessUtil;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
-import org.thoughtcrime.securesms.database.MessagingDatabase;
+import org.thoughtcrime.securesms.database.MessageDatabase;
 import org.thoughtcrime.securesms.database.NoSuchMessageException;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
@@ -57,7 +57,7 @@ public class RemoteDeleteSendJob extends BaseJob {
       throws NoSuchMessageException
   {
     MessageRecord message = isMms ? DatabaseFactory.getMmsDatabase(context).getMessageRecord(messageId)
-                                  : DatabaseFactory.getSmsDatabase(context).getMessage(messageId);
+                                  : DatabaseFactory.getSmsDatabase(context).getSmsMessage(messageId);
 
     Recipient conversationRecipient = DatabaseFactory.getThreadDatabase(context).getRecipientForThreadId(message.getThreadId());
 
@@ -65,7 +65,7 @@ public class RemoteDeleteSendJob extends BaseJob {
       throw new AssertionError("We have a message, but couldn't find the thread!");
     }
 
-    List<RecipientId> recipients = conversationRecipient.isGroup() ? Stream.of(conversationRecipient.getParticipants()).map(Recipient::getId).toList()
+    List<RecipientId> recipients = conversationRecipient.isGroup() ? Stream.of(RecipientUtil.getEligibleForSending(conversationRecipient.getParticipants())).map(Recipient::getId).toList()
                                                                    : Stream.of(conversationRecipient.getId()).toList();
 
     recipients.remove(Recipient.self().getId());
@@ -111,7 +111,7 @@ public class RemoteDeleteSendJob extends BaseJob {
 
   @Override
   protected void onRun() throws Exception {
-    MessagingDatabase db;
+    MessageDatabase db;
     MessageRecord     message;
 
     if (isMms) {
@@ -119,7 +119,7 @@ public class RemoteDeleteSendJob extends BaseJob {
       message = DatabaseFactory.getMmsDatabase(context).getMessageRecord(messageId);
     } else {
       db      = DatabaseFactory.getSmsDatabase(context);
-      message = DatabaseFactory.getSmsDatabase(context).getMessage(messageId);
+      message = DatabaseFactory.getSmsDatabase(context).getSmsMessage(messageId);
     }
 
     long       targetSentTimestamp  = message.getDateSent();
@@ -158,15 +158,15 @@ public class RemoteDeleteSendJob extends BaseJob {
 
   @Override
   public void onFailure() {
-    Log.w(TAG, "Failed to send the reaction to all recipients! (" + (initialRecipientCount - recipients.size() + "/" + initialRecipientCount + ")") );
+    Log.w(TAG, "Failed to send remote delete to all recipients! (" + (initialRecipientCount - recipients.size() + "/" + initialRecipientCount + ")") );
   }
 
   private @NonNull List<Recipient> deliver(@NonNull Recipient conversationRecipient, @NonNull List<Recipient> destinations, long targetSentTimestamp)
       throws IOException, UntrustedIdentityException
   {
     SignalServiceMessageSender             messageSender      = ApplicationDependencies.getSignalServiceMessageSender();
-    List<SignalServiceAddress>             addresses          = Stream.of(destinations).map(t -> RecipientUtil.toSignalServiceAddress(context, t)).toList();
-    List<Optional<UnidentifiedAccessPair>> unidentifiedAccess = Stream.of(destinations).map(recipient -> UnidentifiedAccessUtil.getAccessFor(context, recipient)).toList();
+    List<SignalServiceAddress>             addresses          = RecipientUtil.toSignalServiceAddressesFromResolved(context, destinations);
+    List<Optional<UnidentifiedAccessPair>> unidentifiedAccess = UnidentifiedAccessUtil.getAccessFor(context, destinations);
     SignalServiceDataMessage.Builder       dataMessage        = SignalServiceDataMessage.newBuilder()
                                                                                         .withTimestamp(System.currentTimeMillis())
                                                                                         .withRemoteDelete(new SignalServiceDataMessage.RemoteDelete(targetSentTimestamp));
@@ -177,23 +177,7 @@ public class RemoteDeleteSendJob extends BaseJob {
 
     List<SendMessageResult> results = messageSender.sendMessage(addresses, unidentifiedAccess, false, dataMessage.build());
 
-    Stream.of(results)
-          .filter(r -> r.getIdentityFailure() != null)
-          .map(SendMessageResult::getAddress)
-          .map(a -> Recipient.externalPush(context, a))
-          .forEach(r -> Log.w(TAG, "Identity failure for " + r.getId()));
-
-    Stream.of(results)
-          .filter(SendMessageResult::isUnregisteredFailure)
-          .map(SendMessageResult::getAddress)
-          .map(a -> Recipient.externalPush(context, a))
-          .forEach(r -> Log.w(TAG, "Unregistered failure for " + r.getId()));
-
-    return Stream.of(results)
-                 .filter(r -> r.getSuccess() != null || r.getIdentityFailure() != null || r.isUnregisteredFailure())
-                 .map(SendMessageResult::getAddress)
-                 .map(a -> Recipient.externalPush(context, a))
-                 .toList();
+    return GroupSendJobHelper.getCompletedSends(context, results);
   }
 
   public static class Factory implements Job.Factory<RemoteDeleteSendJob> {

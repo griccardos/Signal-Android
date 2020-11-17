@@ -29,7 +29,7 @@ repositories {
 
 dependencies {
     implementation 'com.google.protobuf:protobuf-javalite:3.10.0'
-    api 'com.googlecode.libphonenumber:libphonenumber:8.11.0'
+    api 'com.googlecode.libphonenumber:libphonenumber:8.12.6'
     api 'com.fasterxml.jackson.core:jackson-databind:2.9.9.2'
 
     api "org.signal:signal-metadata-java:${lib_signal_metadata_version}"
@@ -39,7 +39,7 @@ dependencies {
     api 'org.signal:zkgroup-java:0.7.0'
 
     testImplementation 'junit:junit:4.12'
-    testImplementation 'org.assertj:assertj-core:1.7.1'
+    testImplementation 'org.assertj:assertj-core:3.11.1'
     testImplementation 'org.conscrypt:conscrypt-openjdk-uber:2.0.0'
 }
 

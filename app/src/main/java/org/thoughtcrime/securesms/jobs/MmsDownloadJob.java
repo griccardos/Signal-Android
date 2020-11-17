@@ -13,10 +13,15 @@ import com.google.android.mms.pdu_alt.RetrieveConf;
 
 import org.thoughtcrime.securesms.attachments.Attachment;
 import org.thoughtcrime.securesms.attachments.UriAttachment;
+import org.thoughtcrime.securesms.contactshare.Contact;
+import org.thoughtcrime.securesms.contactshare.ContactUtil;
+import org.thoughtcrime.securesms.contactshare.VCardUtil;
 import org.thoughtcrime.securesms.database.AttachmentDatabase;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
-import org.thoughtcrime.securesms.database.MessagingDatabase.InsertResult;
+import org.thoughtcrime.securesms.database.MessageDatabase;
+import org.thoughtcrime.securesms.database.MessageDatabase.InsertResult;
 import org.thoughtcrime.securesms.database.MmsDatabase;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.groups.GroupId;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.jobmanager.Job;
@@ -27,11 +32,11 @@ import org.thoughtcrime.securesms.mms.IncomingMediaMessage;
 import org.thoughtcrime.securesms.mms.MmsException;
 import org.thoughtcrime.securesms.mms.MmsRadioException;
 import org.thoughtcrime.securesms.mms.PartParser;
-import org.thoughtcrime.securesms.notifications.MessageNotifier;
 import org.thoughtcrime.securesms.providers.BlobProvider;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.thoughtcrime.securesms.service.KeyCachingService;
+import org.thoughtcrime.securesms.util.MediaUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.libsignal.util.guava.Optional;
@@ -94,7 +99,7 @@ public class MmsDownloadJob extends BaseJob {
   public void onAdded() {
     if (automatic && KeyCachingService.isLocked(context)) {
       DatabaseFactory.getMmsDatabase(context).markIncomingNotificationReceived(threadId);
-      MessageNotifier.updateNotification(context);
+      ApplicationDependencies.getMessageNotifier().updateNotification(context);
     }
   }
 
@@ -104,7 +109,7 @@ public class MmsDownloadJob extends BaseJob {
       throw new NotReadyException();
     }
 
-    MmsDatabase                               database     = DatabaseFactory.getMmsDatabase(context);
+    MessageDatabase                           database     = DatabaseFactory.getMmsDatabase(context);
     Optional<MmsDatabase.MmsNotificationInfo> notification = database.getNotification(messageId);
 
     if (!notification.isPresent()) {
@@ -164,12 +169,12 @@ public class MmsDownloadJob extends BaseJob {
 
   @Override
   public void onFailure() {
-    MmsDatabase database = DatabaseFactory.getMmsDatabase(context);
+    MessageDatabase database = DatabaseFactory.getMmsDatabase(context);
     database.markDownloadState(messageId, MmsDatabase.Status.DOWNLOAD_SOFT_FAILURE);
 
     if (automatic) {
       database.markIncomingNotificationReceived(threadId);
-      MessageNotifier.updateNotification(context, threadId);
+      ApplicationDependencies.getMessageNotifier().updateNotification(context, threadId);
     }
   }
 
@@ -183,11 +188,12 @@ public class MmsDownloadJob extends BaseJob {
                                  int subscriptionId, @Nullable RecipientId notificationFrom)
       throws MmsException
   {
-    MmsDatabase       database    = DatabaseFactory.getMmsDatabase(context);
+    MessageDatabase   database    = DatabaseFactory.getMmsDatabase(context);
     Optional<GroupId> group       = Optional.absent();
     Set<RecipientId>  members     = new HashSet<>();
     String            body        = null;
     List<Attachment>  attachments = new LinkedList<>();
+    List<Contact>     sharedContacts = new LinkedList<>();
 
     RecipientId from = null;
 
@@ -222,14 +228,18 @@ public class MmsDownloadJob extends BaseJob {
         PduPart part = media.getPart(i);
 
         if (part.getData() != null) {
-          Uri    uri  = BlobProvider.getInstance().forData(part.getData()).createForSingleUseInMemory();
-          String name = null;
+          if (Util.toIsoString(part.getContentType()).toLowerCase().equals(MediaUtil.VCARD)){
+            sharedContacts.addAll(VCardUtil.parseContacts(new String(part.getData())));
+          } else {
+            Uri    uri  = BlobProvider.getInstance().forData(part.getData()).createForSingleUseInMemory();
+            String name = null;
 
-          if (part.getName() != null) name = Util.toIsoString(part.getName());
+            if (part.getName() != null) name = Util.toIsoString(part.getName());
 
-          attachments.add(new UriAttachment(uri, Util.toIsoString(part.getContentType()),
-                                            AttachmentDatabase.TRANSFER_PROGRESS_DONE,
-                                            part.getData().length, name, false, false, null, null, null, null));
+            attachments.add(new UriAttachment(uri, Util.toIsoString(part.getContentType()),
+                            AttachmentDatabase.TRANSFER_PROGRESS_DONE,
+                            part.getData().length, name, false, false, false, null, null, null, null, null));
+          }
         }
       }
     }
@@ -239,24 +249,24 @@ public class MmsDownloadJob extends BaseJob {
       group = Optional.of(DatabaseFactory.getGroupDatabase(context).getOrCreateMmsGroupForMembers(recipients));
     }
 
-    IncomingMediaMessage   message      = new IncomingMediaMessage(from, group, body, retrieved.getDate() * 1000L, -1, attachments, subscriptionId, 0, false, false, false);
+    IncomingMediaMessage   message      = new IncomingMediaMessage(from, group, body, retrieved.getDate() * 1000L, -1, attachments, subscriptionId, 0, false, false, false, Optional.of(sharedContacts));
     Optional<InsertResult> insertResult = database.insertMessageInbox(message, contentLocation, threadId);
 
     if (insertResult.isPresent()) {
-      database.delete(messageId);
-      MessageNotifier.updateNotification(context, insertResult.get().getThreadId());
+      database.deleteMessage(messageId);
+      ApplicationDependencies.getMessageNotifier().updateNotification(context, insertResult.get().getThreadId());
     }
   }
 
   private void handleDownloadError(long messageId, long threadId, int downloadStatus, boolean automatic)
   {
-    MmsDatabase db = DatabaseFactory.getMmsDatabase(context);
+    MessageDatabase db = DatabaseFactory.getMmsDatabase(context);
 
     db.markDownloadState(messageId, downloadStatus);
 
     if (automatic) {
       db.markIncomingNotificationReceived(threadId);
-      MessageNotifier.updateNotification(context, threadId);
+      ApplicationDependencies.getMessageNotifier().updateNotification(context, threadId);
     }
   }
 

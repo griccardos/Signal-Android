@@ -20,12 +20,22 @@ public final class ProfileNameTest {
     assertFalse("ProfileName should not be CJKV", profileName.isProfileNameCJKV());
     assertEquals("ProfileName should have empty given name", "", profileName.getGivenName());
     assertEquals("ProfileName should have empty family name", "", profileName.getFamilyName());
+    assertTrue(profileName.isEmpty());
   }
 
   @Test
   public void givenNullProfileName_whenIFromSerialized_thenIExpectExactlyEmpty() {
     // GIVEN
     ProfileName profileName = ProfileName.fromSerialized(null);
+
+    // THEN
+    assertSame(ProfileName.EMPTY, profileName);
+  }
+
+  @Test
+  public void givenProfileNameWithNulls_thenIExpectExactlyEmpty() {
+    // GIVEN
+    ProfileName profileName = ProfileName.fromParts(null, null);
 
     // THEN
     assertSame(ProfileName.EMPTY, profileName);
@@ -140,7 +150,7 @@ public final class ProfileNameTest {
     String data = name.serialize();
 
     // THEN
-    assertEquals(data, "Given\0");
+    assertEquals(data, "Given");
   }
 
   @Test

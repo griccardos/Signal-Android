@@ -10,7 +10,9 @@ import com.google.android.collect.Sets;
 
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.thoughtcrime.securesms.BuildConfig;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
+import org.thoughtcrime.securesms.groups.SelectionLimits;
 import org.thoughtcrime.securesms.jobs.RefreshAttributesJob;
 import org.thoughtcrime.securesms.jobs.RemoteConfigRefreshJob;
 import org.thoughtcrime.securesms.keyvalue.SignalStore;
@@ -20,6 +22,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
@@ -47,22 +50,22 @@ public final class FeatureFlags {
 
   private static final long FETCH_INTERVAL = TimeUnit.HOURS.toMillis(2);
 
-  private static final String UUIDS                      = "android.uuids";
-  private static final String MESSAGE_REQUESTS           = "android.messageRequests";
-  private static final String USERNAMES                  = "android.usernames";
-  private static final String PINS_FOR_ALL_LEGACY        = "android.pinsForAll";
-  private static final String PINS_FOR_ALL               = "android.pinsForAll.2";
-  private static final String PINS_FOR_ALL_MANDATORY     = "android.pinsForAllMandatory";
-  private static final String PINS_MEGAPHONE_KILL_SWITCH = "android.pinsMegaphoneKillSwitch";
-  private static final String PROFILE_NAMES_MEGAPHONE    = "android.profileNamesMegaphone";
-  private static final String ATTACHMENTS_V3             = "android.attachmentsV3";
-  private static final String REMOTE_DELETE              = "android.remoteDelete";
-  private static final String PROFILE_FOR_CALLING        = "android.profileForCalling";
-  private static final String CALLING_PIP                = "android.callingPip";
-  private static final String NEW_GROUP_UI               = "android.newGroupUI";
-  private static final String REACT_WITH_ANY_EMOJI       = "android.reactWithAnyEmoji";
-  private static final String GROUPS_V2                  = "android.groupsv2";
-  private static final String GROUPS_V2_CREATE           = "android.groupsv2.create";
+  private static final String USERNAMES                    = "android.usernames";
+  private static final String GROUPS_V2_JOIN_VERSION       = "android.groupsv2.joinVersion";
+  private static final String GROUPS_V2_LINKS_VERSION      = "android.groupsv2.manageGroupLinksVersion";
+  private static final String GROUPS_V2_RECOMMENDED_LIMIT  = "global.groupsv2.maxGroupSize";
+  private static final String GROUPS_V2_HARD_LIMIT         = "global.groupsv2.groupSizeHardLimit";
+  private static final String INTERNAL_USER                = "android.internalUser";
+  private static final String VERIFY_V2                    = "android.verifyV2";
+  private static final String PHONE_NUMBER_PRIVACY_VERSION = "android.phoneNumberPrivacyVersion";
+  private static final String CLIENT_EXPIRATION            = "android.clientExpiration";
+  public  static final String RESEARCH_MEGAPHONE_1         = "research.megaphone.1";
+  private static final String VIEWED_RECEIPTS              = "android.viewed.receipts";
+  private static final String MAX_ENVELOPE_SIZE            = "android.maxEnvelopeSize";
+  private static final String GV1_AUTO_MIGRATE_VERSION     = "android.groupsv2.autoMigrateVersion";
+  private static final String GV1_MANUAL_MIGRATE_VERSION   = "android.groupsv2.manualMigrateVersion";
+  private static final String GV1_FORCED_MIGRATE_VERSION   = "android.groupsv2.forcedMigrateVersion";
+  private static final String GROUP_CALLING_VERSION        = "android.groupsv2.callingVersion";
 
   /**
    * We will only store remote values for flags in this set. If you want a flag to be controllable
@@ -70,18 +73,20 @@ public final class FeatureFlags {
    */
 
   private static final Set<String> REMOTE_CAPABLE = Sets.newHashSet(
-      PINS_FOR_ALL_LEGACY,
-      PINS_FOR_ALL,
-      PINS_FOR_ALL_MANDATORY,
-      PINS_MEGAPHONE_KILL_SWITCH,
-      PROFILE_NAMES_MEGAPHONE,
-      MESSAGE_REQUESTS,
-      ATTACHMENTS_V3,
-      REMOTE_DELETE,
-      PROFILE_FOR_CALLING,
-      CALLING_PIP,
-      NEW_GROUP_UI,
-      REACT_WITH_ANY_EMOJI
+      GROUPS_V2_RECOMMENDED_LIMIT,
+      GROUPS_V2_HARD_LIMIT,
+      GROUPS_V2_JOIN_VERSION,
+      GROUPS_V2_LINKS_VERSION,
+      INTERNAL_USER,
+      USERNAMES,
+      VERIFY_V2,
+      CLIENT_EXPIRATION,
+      RESEARCH_MEGAPHONE_1,
+      VIEWED_RECEIPTS,
+      MAX_ENVELOPE_SIZE,
+      GV1_AUTO_MIGRATE_VERSION,
+      GV1_MANUAL_MIGRATE_VERSION,
+      GROUP_CALLING_VERSION
   );
 
   /**
@@ -102,19 +107,18 @@ public final class FeatureFlags {
    * more burden on the reader to ensure that the app experience remains consistent.
    */
   private static final Set<String> HOT_SWAPPABLE = Sets.newHashSet(
-      PINS_MEGAPHONE_KILL_SWITCH,
-      ATTACHMENTS_V3,
-      REACT_WITH_ANY_EMOJI
+      GROUPS_V2_JOIN_VERSION,
+      VERIFY_V2,
+      CLIENT_EXPIRATION,
+      MAX_ENVELOPE_SIZE
   );
 
   /**
    * Flags in this set will stay true forever once they receive a true value from a remote config.
    */
   private static final Set<String> STICKY = Sets.newHashSet(
-      PINS_FOR_ALL_LEGACY,
-      PINS_FOR_ALL,
-      GROUPS_V2
-  );
+      VERIFY_V2
+    );
 
   /**
    * Listeners that are called when the value in {@link #REMOTE_VALUES} changes. That means that
@@ -128,8 +132,7 @@ public final class FeatureFlags {
    * desired test state.
    */
   private static final Map<String, OnFlagChange> FLAG_CHANGE_LISTENERS = new HashMap<String, OnFlagChange>() {{
-    put(MESSAGE_REQUESTS, (change) -> SignalStore.setMessageRequestEnableTime(change == Change.ENABLED ? System.currentTimeMillis() : 0));
-    put(GROUPS_V2,        (change) -> ApplicationDependencies.getJobManager().add(new RefreshAttributesJob()));
+    put(GV1_AUTO_MIGRATE_VERSION, change -> ApplicationDependencies.getJobManager().add(new RefreshAttributesJob()));
   }};
 
   private static final Map<String, Object> REMOTE_VALUES = new TreeMap<>();
@@ -151,7 +154,7 @@ public final class FeatureFlags {
   public static synchronized void refreshIfNecessary() {
     long timeSinceLastFetch = System.currentTimeMillis() - SignalStore.remoteConfigValues().getLastFetchTime();
 
-    if (timeSinceLastFetch > FETCH_INTERVAL) {
+    if (timeSinceLastFetch < 0 || timeSinceLastFetch > FETCH_INTERVAL) {
       Log.i(TAG, "Scheduling remote config refresh.");
       ApplicationDependencies.getJobManager().add(new RemoteConfigRefreshJob());
     } else {
@@ -177,97 +180,105 @@ public final class FeatureFlags {
     Log.i(TAG, "[Disk]   After : " + result.getDisk().toString());
   }
 
-  /** UUID-related stuff that shouldn't be activated until the user-facing launch. */
-  public static synchronized boolean uuids() {
-    return getBoolean(UUIDS, false);
-  }
-
-  /** Favoring profile names when displaying contacts. */
-  public static synchronized boolean profileDisplay() {
-    return messageRequests();
-  }
-
-  /** MessageRequest stuff */
-  public static synchronized boolean messageRequests() {
-    return getBoolean(MESSAGE_REQUESTS, false);
-  }
-
-  /** Creating usernames, sending messages by username. Requires {@link #uuids()}. */
+  /** Creating usernames, sending messages by username. */
   public static synchronized boolean usernames() {
-    boolean value = getBoolean(USERNAMES, false);
-    if (value && !uuids()) throw new MissingFlagRequirementError();
-    return value;
+    return getBoolean(USERNAMES, false);
+  }
+
+  /** Allow creation and managing of group links. */
+  public static boolean groupsV2manageGroupLinks() {
+    return getVersionFlag(GROUPS_V2_LINKS_VERSION) == VersionFlag.ON;
   }
 
   /**
-   * - Starts showing prompts for users to create PINs.
-   * - Shows new reminder UI.
-   * - Shows new settings UI.
-   * - Syncs to storage service.
+   * Maximum number of members allowed in a group.
    */
-  public static boolean pinsForAll() {
-    return SignalStore.registrationValues().pinWasRequiredAtRegistration() ||
-           SignalStore.kbsValues().isV2RegistrationLockEnabled()           ||
-           SignalStore.kbsValues().hasPin()                                ||
-           pinsForAllMandatory()                                           ||
-           getBoolean(PINS_FOR_ALL_LEGACY, false)                          ||
-           getBoolean(PINS_FOR_ALL, false);
+  public static SelectionLimits groupLimits() {
+    return new SelectionLimits(getInteger(GROUPS_V2_RECOMMENDED_LIMIT, 151),
+                               getInteger(GROUPS_V2_HARD_LIMIT, 1001));
   }
 
-  /** Makes it so the user will eventually see a fullscreen splash requiring them to create a PIN. */
-  public static boolean pinsForAllMandatory() {
-    return getBoolean(PINS_FOR_ALL_MANDATORY, false);
+  /**
+   * Ability of local client to join a GV2 group.
+   * <p>
+   * You must still check GV2 capabilities to respect linked devices.
+   */
+  public static GroupJoinStatus clientLocalGroupJoinStatus() {
+    switch (getVersionFlag(GROUPS_V2_JOIN_VERSION)) {
+      case ON_IN_FUTURE_VERSION: return GroupJoinStatus.UPDATE_TO_JOIN;
+      case ON                  : return GroupJoinStatus.LOCAL_CAN_JOIN;
+      case OFF                 :
+      default                  : return GroupJoinStatus.COMING_SOON;
+    }
   }
 
-  /** Safety flag to disable Pins for All Megaphone */
-  public static boolean pinsForAllMegaphoneKillSwitch() {
-    return getBoolean(PINS_MEGAPHONE_KILL_SWITCH, false);
+  public enum GroupJoinStatus {
+    /** No version of the client that can join V2 groups by link is in production. */
+    COMING_SOON,
+
+    /** A newer version of the client is in production that will allow joining via GV2 group links. */
+    UPDATE_TO_JOIN,
+
+    /** This version of the client allows joining via GV2 group links. */
+    LOCAL_CAN_JOIN
   }
 
-  /** Safety switch for disabling profile names megaphone */
-  public static boolean profileNamesMegaphone() {
-    return getBoolean(PROFILE_NAMES_MEGAPHONE, false) &&
-           TextSecurePreferences.getFirstInstallVersion(ApplicationDependencies.getApplication()) < 600;
+  /** Internal testing extensions. */
+  public static boolean internalUser() {
+    return getBoolean(INTERNAL_USER, false);
   }
 
-  /** Whether or not we use the attachments v3 form. */
-  public static boolean attachmentsV3() {
-    return getBoolean(ATTACHMENTS_V3, false);
+  /** Whether or not to use the UUID in verification codes. */
+  public static boolean verifyV2() {
+    return getBoolean(VERIFY_V2, false);
   }
 
-  /** Send support for remotely deleting a message. */
-  public static boolean remoteDelete() {
-    return getBoolean(REMOTE_DELETE, false);
+  /** The raw client expiration JSON string. */
+  public static String clientExpiration() {
+    return getString(CLIENT_EXPIRATION, null);
   }
 
-  /** Whether or not profile sharing is required for calling */
-  public static boolean profileForCalling() {
-    return messageRequests() && getBoolean(PROFILE_FOR_CALLING, false);
+  /** The raw research megaphone CSV string */
+  public static String researchMegaphone() {
+    return getString(RESEARCH_MEGAPHONE_1, "");
   }
 
-  /** Whether or not to display Calling PIP */
-  public static boolean callingPip() {
-    return getBoolean(CALLING_PIP, false);
+  /**
+   * Whether the user can choose phone number privacy settings, and;
+   * Whether to fetch and store the secondary certificate
+   */
+  public static boolean phoneNumberPrivacy() {
+    return getVersionFlag(PHONE_NUMBER_PRIVACY_VERSION) == VersionFlag.ON;
   }
 
-  /** New group UI elements. */
-  public static boolean newGroupUI() {
-    return getBoolean(NEW_GROUP_UI, false);
+  /** Whether the user should display the content revealed dot in voice notes. */
+  public static boolean viewedReceipts() {
+    return getBoolean(VIEWED_RECEIPTS, false);
   }
 
-  /** React with Any Emoji */
-  public static boolean reactWithAnyEmoji() {
-    return getBoolean(REACT_WITH_ANY_EMOJI, false);
+  /** The max size envelope that is allowed to be sent. */
+  public static int maxEnvelopeSize() {
+    return getInteger(MAX_ENVELOPE_SIZE, 0);
   }
 
-  /** Groups v2 send and receive. */
-  public static boolean groupsV2() {
-    return org.whispersystems.signalservice.FeatureFlags.ZK_GROUPS && getBoolean(GROUPS_V2, false);
+  /** Whether or not auto-migration from GV1->GV2 is enabled. */
+  public static boolean groupsV1AutoMigration() {
+    return getVersionFlag(GV1_AUTO_MIGRATE_VERSION) == VersionFlag.ON;
   }
 
-  /** Groups v2 send and receive. */
-  public static boolean groupsV2create() {
-    return groupsV2() && getBoolean(GROUPS_V2_CREATE, false);
+  /** Whether or not manual migration from GV1->GV2 is enabled. */
+  public static boolean groupsV1ManualMigration() {
+    return groupsV1AutoMigration() && getVersionFlag(GV1_MANUAL_MIGRATE_VERSION) == VersionFlag.ON;
+  }
+
+  /** Whether or not group calling is enabled. */
+  public static boolean groupCalling() {
+    return getVersionFlag(GROUP_CALLING_VERSION) == VersionFlag.ON;
+  }
+
+  /** Whether or not forced migration from GV1->GV2 is enabled. */
+  public static boolean groupsV1ForcedMigration() {
+    return groupsV1AutoMigration() && getVersionFlag(GV1_FORCED_MIGRATE_VERSION) == VersionFlag.ON;
   }
 
   /** Only for rendering debug info. */
@@ -378,12 +389,37 @@ public final class FeatureFlags {
         changes.put(key, Change.REMOVED);
       } else if (newValue != oldValue && newValue instanceof Boolean) {
         changes.put(key, (boolean) newValue ? Change.ENABLED : Change.DISABLED);
-      } else if (newValue != oldValue) {
+      } else if (!Objects.equals(oldValue, newValue)) {
         changes.put(key, Change.CHANGED);
       }
     }
 
     return changes;
+  }
+
+  private static @NonNull VersionFlag getVersionFlag(@NonNull String key) {
+    int versionFromKey = getInteger(key, 0);
+
+    if (versionFromKey == 0) {
+      return VersionFlag.OFF;
+    }
+
+    if (BuildConfig.CANONICAL_VERSION_CODE >= versionFromKey) {
+      return VersionFlag.ON;
+    } else {
+      return VersionFlag.ON_IN_FUTURE_VERSION;
+    }
+  }
+
+  private enum VersionFlag {
+    /** The flag is no set */
+    OFF,
+
+    /** The flag is set on for a version higher than the current client version */
+    ON_IN_FUTURE_VERSION,
+
+    /** The flag is set on for this version or earlier */
+    ON
   }
 
   private static boolean getBoolean(@NonNull String key, boolean defaultValue) {
@@ -408,13 +444,27 @@ public final class FeatureFlags {
       return forced;
     }
 
-    String remote = (String) REMOTE_VALUES.get(key);
-    if (remote != null) {
+    Object remote = REMOTE_VALUES.get(key);
+    if (remote instanceof String) {
       try {
-        return Integer.parseInt(remote);
+        return Integer.parseInt((String) remote);
       } catch (NumberFormatException e) {
         Log.w(TAG, "Expected an int for key '" + key + "', but got something else! Falling back to the default.");
       }
+    }
+
+    return defaultValue;
+  }
+
+  private static String getString(@NonNull String key, String defaultValue) {
+    String forced = (String) FORCED_VALUES.get(key);
+    if (forced != null) {
+      return forced;
+    }
+
+    Object remote = REMOTE_VALUES.get(key);
+    if (remote instanceof String) {
+      return (String) remote;
     }
 
     return defaultValue;
@@ -468,14 +518,11 @@ public final class FeatureFlags {
     }
   }
 
-  private static final class MissingFlagRequirementError extends Error {
-  }
-
   @VisibleForTesting
   static final class UpdateResult {
     private final Map<String, Object> memory;
     private final Map<String, Object> disk;
-    private final Map<String, Change>  memoryChanges;
+    private final Map<String, Change> memoryChanges;
 
     UpdateResult(@NonNull Map<String, Object> memory, @NonNull Map<String, Object> disk, @NonNull Map<String, Change> memoryChanges) {
       this.memory        = memory;
@@ -504,10 +551,4 @@ public final class FeatureFlags {
   enum Change {
     ENABLED, DISABLED, CHANGED, REMOVED
   }
-
-  /** Read and write versioned profile information. */
-  public static final boolean VERSIONED_PROFILES = org.whispersystems.signalservice.FeatureFlags.VERSIONED_PROFILES;
-
-  /** Enabled ZKGroups library. */
-  public static final boolean ZK_GROUPS = org.whispersystems.signalservice.FeatureFlags.ZK_GROUPS;
 }

@@ -21,9 +21,9 @@ import net.sqlcipher.database.SQLiteDatabase;
 import net.sqlcipher.database.SQLiteDatabaseHook;
 import net.sqlcipher.database.SQLiteOpenHelper;
 
-import org.thoughtcrime.securesms.color.MaterialColor;
-import org.thoughtcrime.securesms.contacts.avatars.ContactColors;
 import org.thoughtcrime.securesms.contacts.avatars.ContactColorsLegacy;
+import org.thoughtcrime.securesms.database.MentionDatabase;
+import org.thoughtcrime.securesms.database.RemappedRecordsDatabase;
 import org.thoughtcrime.securesms.profiles.AvatarHelper;
 import org.thoughtcrime.securesms.profiles.ProfileName;
 import org.thoughtcrime.securesms.recipients.RecipientId;
@@ -57,17 +57,22 @@ import org.thoughtcrime.securesms.notifications.NotificationChannels;
 import org.thoughtcrime.securesms.phonenumbers.PhoneNumberFormatter;
 import org.thoughtcrime.securesms.service.KeyCachingService;
 import org.thoughtcrime.securesms.util.Base64;
+import org.thoughtcrime.securesms.util.CursorUtil;
 import org.thoughtcrime.securesms.util.FileUtils;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.util.SqlUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
+import org.thoughtcrime.securesms.util.Triple;
 import org.thoughtcrime.securesms.util.Util;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 public class SQLCipherOpenHelper extends SQLiteOpenHelper {
 
@@ -134,8 +139,29 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
   private static final int SERVER_TIMESTAMP                 = 59;
   private static final int REMOTE_DELETE                    = 60;
   private static final int COLOR_MIGRATION                  = 61;
+  private static final int LAST_SCROLLED                    = 62;
+  private static final int LAST_PROFILE_FETCH               = 63;
+  private static final int SERVER_DELIVERED_TIMESTAMP       = 64;
+  private static final int QUOTE_CLEANUP                    = 65;
+  private static final int BORDERLESS                       = 66;
+  private static final int REMAPPED_RECORDS                 = 67;
+  private static final int MENTIONS                         = 68;
+  private static final int PINNED_CONVERSATIONS             = 69;
+  private static final int MENTION_GLOBAL_SETTING_MIGRATION = 70;
+  private static final int UNKNOWN_STORAGE_FIELDS           = 71;
+  private static final int STICKER_CONTENT_TYPE             = 72;
+  private static final int STICKER_EMOJI_IN_NOTIFICATIONS   = 73;
+  private static final int THUMBNAIL_CLEANUP                = 74;
+  private static final int STICKER_CONTENT_TYPE_CLEANUP     = 75;
+  private static final int MENTION_CLEANUP                  = 76;
+  private static final int MENTION_CLEANUP_V2               = 77;
+  private static final int REACTION_CLEANUP                 = 78;
+  private static final int CAPABILITIES_REFACTOR            = 79;
+  private static final int GV1_MIGRATION                    = 80;
+  private static final int NOTIFIED_TIMESTAMP               = 81;
+  private static final int GV1_MIGRATION_LAST_SEEN          = 82;
 
-  private static final int    DATABASE_VERSION = 61;
+  private static final int    DATABASE_VERSION = 82;
   private static final String DATABASE_NAME    = "signal.db";
 
   private final Context        context;
@@ -179,8 +205,10 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
     db.execSQL(StorageKeyDatabase.CREATE_TABLE);
     db.execSQL(KeyValueDatabase.CREATE_TABLE);
     db.execSQL(MegaphoneDatabase.CREATE_TABLE);
+    db.execSQL(MentionDatabase.CREATE_TABLE);
     executeStatements(db, SearchDatabase.CREATE_TABLE);
     executeStatements(db, JobDatabase.CREATE_TABLE);
+    executeStatements(db, RemappedRecordsDatabase.CREATE_TABLE);
 
     executeStatements(db, RecipientDatabase.CREATE_INDEXS);
     executeStatements(db, SmsDatabase.CREATE_INDEXS);
@@ -192,6 +220,7 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
     executeStatements(db, GroupReceiptDatabase.CREATE_INDEXES);
     executeStatements(db, StickerDatabase.CREATE_INDEXES);
     executeStatements(db, StorageKeyDatabase.CREATE_INDEXES);
+    executeStatements(db, MentionDatabase.CREATE_INDEXES);
 
     if (context.getDatabasePath(ClassicOpenHelper.NAME).exists()) {
       ClassicOpenHelper                      legacyHelper = new ClassicOpenHelper(context);
@@ -904,6 +933,241 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
             db.update("recipient", values, "_id = ?", new String[] { String.valueOf(id) });
           }
         }
+      }
+
+      if (oldVersion < LAST_SCROLLED) {
+        db.execSQL("ALTER TABLE thread ADD COLUMN last_scrolled INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < LAST_PROFILE_FETCH) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN last_profile_fetch INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < SERVER_DELIVERED_TIMESTAMP) {
+        db.execSQL("ALTER TABLE push ADD COLUMN server_delivered_timestamp INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < QUOTE_CLEANUP) {
+        String query = "SELECT _data " +
+                       "FROM (SELECT _data, MIN(quote) AS all_quotes " +
+                             "FROM part " +
+                             "WHERE _data NOT NULL AND data_hash NOT NULL " +
+                             "GROUP BY _data) " +
+                       "WHERE all_quotes = 1";
+
+        int count = 0;
+
+        try (Cursor cursor = db.rawQuery(query, null)) {
+          while (cursor != null && cursor.moveToNext()) {
+            String data = cursor.getString(cursor.getColumnIndexOrThrow("_data"));
+
+            if (new File(data).delete()) {
+              ContentValues values = new ContentValues();
+              values.putNull("_data");
+              values.putNull("data_random");
+              values.putNull("thumbnail");
+              values.putNull("thumbnail_random");
+              values.putNull("data_hash");
+              db.update("part", values, "_data = ?", new String[] { data });
+
+              count++;
+            } else {
+              Log.w(TAG, "[QuoteCleanup] Failed to delete " + data);
+            }
+          }
+        }
+
+        Log.i(TAG, "[QuoteCleanup] Cleaned up " + count + " quotes.");
+      }
+
+      if (oldVersion < BORDERLESS) {
+        db.execSQL("ALTER TABLE part ADD COLUMN borderless INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < REMAPPED_RECORDS) {
+        db.execSQL("CREATE TABLE remapped_recipients (_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                                                     "old_id INTEGER UNIQUE, " +
+                                                     "new_id INTEGER)");
+        db.execSQL("CREATE TABLE remapped_threads (_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                                                  "old_id INTEGER UNIQUE, " +
+                                                  "new_id INTEGER)");
+      }
+
+      if (oldVersion < MENTIONS) {
+        db.execSQL("CREATE TABLE mention (_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                                         "thread_id INTEGER, " +
+                                         "message_id INTEGER, " +
+                                         "recipient_id INTEGER, " +
+                                         "range_start INTEGER, " +
+                                         "range_length INTEGER)");
+
+        db.execSQL("CREATE INDEX IF NOT EXISTS mention_message_id_index ON mention (message_id)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS mention_recipient_id_thread_id_index ON mention (recipient_id, thread_id);");
+
+        db.execSQL("ALTER TABLE mms ADD COLUMN quote_mentions BLOB DEFAULT NULL");
+        db.execSQL("ALTER TABLE mms ADD COLUMN mentions_self INTEGER DEFAULT 0");
+
+        db.execSQL("ALTER TABLE recipient ADD COLUMN mention_setting INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < PINNED_CONVERSATIONS) {
+        db.execSQL("ALTER TABLE thread ADD COLUMN pinned INTEGER DEFAULT 0");
+        db.execSQL("CREATE INDEX IF NOT EXISTS thread_pinned_index ON thread (pinned)");
+      }
+
+      if (oldVersion < MENTION_GLOBAL_SETTING_MIGRATION) {
+        ContentValues updateAlways = new ContentValues();
+        updateAlways.put("mention_setting", 0);
+        db.update("recipient", updateAlways, "mention_setting = 1", null);
+
+        ContentValues updateNever = new ContentValues();
+        updateNever.put("mention_setting", 1);
+        db.update("recipient", updateNever, "mention_setting = 2", null);
+      }
+
+      if (oldVersion < UNKNOWN_STORAGE_FIELDS) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN storage_proto TEXT DEFAULT NULL");
+      }
+
+      if (oldVersion < STICKER_CONTENT_TYPE) {
+        db.execSQL("ALTER TABLE sticker ADD COLUMN content_type TEXT DEFAULT NULL");
+      }
+
+      if (oldVersion < STICKER_EMOJI_IN_NOTIFICATIONS) {
+        db.execSQL("ALTER TABLE part ADD COLUMN sticker_emoji TEXT DEFAULT NULL");
+      }
+
+      if (oldVersion < THUMBNAIL_CLEANUP) {
+        int total   = 0;
+        int deleted = 0;
+
+        try (Cursor cursor = db.rawQuery("SELECT thumbnail FROM part WHERE thumbnail NOT NULL", null)) {
+          if (cursor != null) {
+            total = cursor.getCount();
+            Log.w(TAG, "Found " + total + " thumbnails to delete.");
+          }
+
+          while (cursor != null && cursor.moveToNext()) {
+            File file = new File(CursorUtil.requireString(cursor, "thumbnail"));
+
+            if (file.delete()) {
+              deleted++;
+            } else {
+              Log.w(TAG, "Failed to delete file! " + file.getAbsolutePath());
+            }
+          }
+        }
+
+        Log.w(TAG, "Deleted " + deleted + "/" + total + " thumbnail files.");
+      }
+
+      if (oldVersion < STICKER_CONTENT_TYPE_CLEANUP) {
+        ContentValues values = new ContentValues();
+        values.put("ct", "image/webp");
+
+        String query = "sticker_id NOT NULL AND (ct IS NULL OR ct = '')";
+
+        int rows = db.update("part", values, query, null);
+        Log.i(TAG, "Updated " + rows + " sticker attachment content types.");
+      }
+
+      if (oldVersion < MENTION_CLEANUP) {
+        String selectMentionIdsNotInGroupsV2 = "select mention._id from mention left join thread on mention.thread_id = thread._id left join recipient on thread.recipient_ids = recipient._id where recipient.group_type != 3";
+        db.delete("mention", "_id in (" + selectMentionIdsNotInGroupsV2 + ")", null);
+        db.delete("mention", "message_id NOT IN (SELECT _id FROM mms) OR thread_id NOT IN (SELECT _id from thread)", null);
+
+        List<Long> idsToDelete = new LinkedList<>();
+        try (Cursor cursor = db.rawQuery("select mention.*, mms.body from mention inner join mms on mention.message_id = mms._id", null)) {
+          while (cursor != null && cursor.moveToNext()) {
+            int    rangeStart  = CursorUtil.requireInt(cursor, "range_start");
+            int    rangeLength = CursorUtil.requireInt(cursor, "range_length");
+            String body        = CursorUtil.requireString(cursor, "body");
+
+            if (body == null || body.isEmpty() || rangeStart < 0 || rangeLength < 0 || (rangeStart + rangeLength) > body.length()) {
+              idsToDelete.add(CursorUtil.requireLong(cursor, "_id"));
+            }
+          }
+        }
+
+        if (Util.hasItems(idsToDelete)) {
+          String ids = TextUtils.join(",", idsToDelete);
+          db.delete("mention", "_id in (" + ids + ")", null);
+        }
+      }
+
+      if (oldVersion < MENTION_CLEANUP_V2) {
+        String selectMentionIdsWithMismatchingThreadIds = "select mention._id from mention left join mms on mention.message_id = mms._id where mention.thread_id != mms.thread_id";
+        db.delete("mention", "_id in (" + selectMentionIdsWithMismatchingThreadIds + ")", null);
+
+        List<Long>                          idsToDelete   = new LinkedList<>();
+        Set<Triple<Long, Integer, Integer>> mentionTuples = new HashSet<>();
+        try (Cursor cursor = db.rawQuery("select mention.*, mms.body from mention inner join mms on mention.message_id = mms._id order by mention._id desc", null)) {
+          while (cursor != null && cursor.moveToNext()) {
+            long   mentionId   = CursorUtil.requireLong(cursor, "_id");
+            long   messageId   = CursorUtil.requireLong(cursor, "message_id");
+            int    rangeStart  = CursorUtil.requireInt(cursor, "range_start");
+            int    rangeLength = CursorUtil.requireInt(cursor, "range_length");
+            String body        = CursorUtil.requireString(cursor, "body");
+
+            if (body != null && rangeStart < body.length() && body.charAt(rangeStart) != '\uFFFC') {
+              idsToDelete.add(mentionId);
+            } else {
+              Triple<Long, Integer, Integer> tuple = new Triple<>(messageId, rangeStart, rangeLength);
+              if (mentionTuples.contains(tuple)) {
+                idsToDelete.add(mentionId);
+              } else {
+                mentionTuples.add(tuple);
+              }
+            }
+          }
+
+          if (Util.hasItems(idsToDelete)) {
+            String ids = TextUtils.join(",", idsToDelete);
+            db.delete("mention", "_id in (" + ids + ")", null);
+          }
+        }
+      }
+
+      if (oldVersion < REACTION_CLEANUP) {
+        ContentValues values = new ContentValues();
+        values.putNull("reactions");
+        db.update("sms", values, "remote_deleted = ?", new String[] { "1" });
+      }
+
+      if (oldVersion < CAPABILITIES_REFACTOR) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN capabilities INTEGER DEFAULT 0");
+
+        db.execSQL("UPDATE recipient SET capabilities = 1 WHERE gv2_capability = 1");
+        db.execSQL("UPDATE recipient SET capabilities = 2 WHERE gv2_capability = -1");
+      }
+
+      if (oldVersion < GV1_MIGRATION) {
+        db.execSQL("ALTER TABLE groups ADD COLUMN expected_v2_id TEXT DEFAULT NULL");
+        db.execSQL("ALTER TABLE groups ADD COLUMN former_v1_members TEXT DEFAULT NULL");
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS expected_v2_id_index ON groups (expected_v2_id)");
+
+        int count = 0;
+        try (Cursor cursor = db.rawQuery("SELECT * FROM groups WHERE group_id LIKE '__textsecure_group__!%' AND LENGTH(group_id) = 53", null)) {
+          while (cursor.moveToNext()) {
+            String gv1 = CursorUtil.requireString(cursor, "group_id");
+            String gv2 = GroupId.parseOrThrow(gv1).requireV1().deriveV2MigrationGroupId().toString();
+
+            ContentValues values = new ContentValues();
+            values.put("expected_v2_id", gv2);
+            count += db.update("groups", values, "group_id = ?", SqlUtil.buildArgs(gv1));
+          }
+        }
+
+        Log.i(TAG, "Updated " + count + " GV1 groups with expected GV2 IDs.");
+      }
+
+      if (oldVersion < NOTIFIED_TIMESTAMP) {
+        db.execSQL("ALTER TABLE sms ADD COLUMN notified_timestamp INTEGER DEFAULT 0");
+        db.execSQL("ALTER TABLE mms ADD COLUMN notified_timestamp INTEGER DEFAULT 0");
+      }
+
+      if (oldVersion < GV1_MIGRATION_LAST_SEEN) {
+        db.execSQL("ALTER TABLE recipient ADD COLUMN last_gv1_migrate_reminder INTEGER DEFAULT 0");
       }
 
       db.setTransactionSuccessful();

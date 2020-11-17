@@ -5,17 +5,19 @@ import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.lifecycle.Observer;
 
 import com.airbnb.lottie.LottieAnimationView;
 import com.airbnb.lottie.LottieProperty;
@@ -28,18 +30,17 @@ import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 import org.thoughtcrime.securesms.R;
-import org.thoughtcrime.securesms.audio.AudioSlidePlayer;
+import org.thoughtcrime.securesms.audio.AudioWaveForm;
+import org.thoughtcrime.securesms.components.voice.VoiceNotePlaybackState;
 import org.thoughtcrime.securesms.database.AttachmentDatabase;
 import org.thoughtcrime.securesms.events.PartProgressEvent;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.AudioSlide;
 import org.thoughtcrime.securesms.mms.SlideClickListener;
 
-import java.io.IOException;
-import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-public final class AudioView extends FrameLayout implements AudioSlidePlayer.Listener {
+public final class AudioView extends FrameLayout {
 
   private static final String TAG = AudioView.class.getSimpleName();
 
@@ -47,7 +48,6 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
   private static final int REVERSE  = -1;
 
   @NonNull private final AnimatingToggle     controlToggle;
-  @NonNull private final ViewGroup           container;
   @NonNull private final View                progressAndPlay;
   @NonNull private final LottieAnimationView playPauseButton;
   @NonNull private final ImageView           downloadButton;
@@ -56,13 +56,21 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
            private final boolean             smallView;
            private final boolean             autoRewind;
 
-  @Nullable private final TextView timestamp;
+  @Nullable private final TextView duration;
+
+  @ColorInt private final int waveFormPlayedBarsColor;
+  @ColorInt private final int waveFormUnplayedBarsColor;
+  @ColorInt private final int waveFormThumbTint;
 
   @Nullable private SlideClickListener downloadListener;
-  @Nullable private AudioSlidePlayer   audioSlidePlayer;
             private int                backwardsCounter;
             private int                lottieDirection;
             private boolean            isPlaying;
+            private long               durationMillis;
+            private AudioSlide         audioSlide;
+            private Callbacks          callbacks;
+
+  private final Observer<VoiceNotePlaybackState> playbackStateObserver = this::onPlaybackState;
 
   public AudioView(Context context) {
     this(context, null);
@@ -83,22 +91,25 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
 
       inflate(context, smallView ? R.layout.audio_view_small : R.layout.audio_view, this);
 
-      this.container       = findViewById(R.id.audio_widget_container);
       this.controlToggle   = findViewById(R.id.control_toggle);
       this.playPauseButton = findViewById(R.id.play);
       this.progressAndPlay = findViewById(R.id.progress_and_play);
       this.downloadButton  = findViewById(R.id.download);
       this.circleProgress  = findViewById(R.id.circle_progress);
       this.seekBar         = findViewById(R.id.seek);
-      this.timestamp       = findViewById(R.id.timestamp);
+      this.duration        = findViewById(R.id.duration);
 
       lottieDirection = REVERSE;
       this.playPauseButton.setOnClickListener(new PlayPauseClickedListener());
       this.seekBar.setOnSeekBarChangeListener(new SeekBarModifiedListener());
 
-      setTint(typedArray.getColor(R.styleable.AudioView_foregroundTintColor, Color.WHITE),
-              typedArray.getColor(R.styleable.AudioView_backgroundTintColor, Color.WHITE));
-      container.setBackgroundColor(typedArray.getColor(R.styleable.AudioView_widgetBackground, Color.TRANSPARENT));
+      setTint(typedArray.getColor(R.styleable.AudioView_foregroundTintColor, Color.WHITE));
+
+      this.waveFormPlayedBarsColor   = typedArray.getColor(R.styleable.AudioView_waveformPlayedBarsColor, Color.WHITE);
+      this.waveFormUnplayedBarsColor = typedArray.getColor(R.styleable.AudioView_waveformUnplayedBarsColor, Color.WHITE);
+      this.waveFormThumbTint         = typedArray.getColor(R.styleable.AudioView_waveformThumbTint, Color.WHITE);
+
+      progressAndPlay.getBackground().setColorFilter(typedArray.getColor(R.styleable.AudioView_progressAndPlayTint, Color.BLACK), PorterDuff.Mode.SRC_IN);
     } finally {
       if (typedArray != null) {
         typedArray.recycle();
@@ -118,34 +129,73 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
     EventBus.getDefault().unregister(this);
   }
 
+  public Observer<VoiceNotePlaybackState> getPlaybackStateObserver() {
+    return playbackStateObserver;
+  }
+
   public void setAudio(final @NonNull AudioSlide audio,
-                       final boolean showControls)
+                       final @Nullable Callbacks callbacks,
+                       final boolean showControls,
+                       final boolean forceHideDuration)
   {
+    this.callbacks = callbacks;
+
+    if (duration != null) {
+      duration.setVisibility(View.VISIBLE);
+    }
+
+    if (seekBar instanceof WaveFormSeekBarView) {
+      if (audioSlide != null && !Objects.equals(audioSlide.getUri(), audio.getUri())) {
+       WaveFormSeekBarView waveFormView = (WaveFormSeekBarView) seekBar;
+       waveFormView.setWaveMode(false);
+       seekBar.setProgress(0);
+       durationMillis = 0;
+      }
+    }
 
     if (showControls && audio.isPendingDownload()) {
       controlToggle.displayQuick(downloadButton);
       seekBar.setEnabled(false);
       downloadButton.setOnClickListener(new DownloadClickedListener(audio));
       if (circleProgress.isSpinning()) circleProgress.stopSpinning();
+      circleProgress.setVisibility(View.GONE);
     } else if (showControls && audio.getTransferState() == AttachmentDatabase.TRANSFER_PROGRESS_STARTED) {
       controlToggle.displayQuick(progressAndPlay);
       seekBar.setEnabled(false);
+      circleProgress.setVisibility(View.VISIBLE);
       circleProgress.spin();
     } else {
       seekBar.setEnabled(true);
       if (circleProgress.isSpinning()) circleProgress.stopSpinning();
       showPlayButton();
-      lottieDirection = REVERSE;
-      playPauseButton.cancelAnimation();
-      playPauseButton.setFrame(0);
     }
 
-    this.audioSlidePlayer = AudioSlidePlayer.createFor(getContext(), audio, this);
-  }
+    this.audioSlide = audio;
 
-  public void cleanup() {
-    if (this.audioSlidePlayer != null && isPlaying) {
-      this.audioSlidePlayer.stop();
+    if (seekBar instanceof WaveFormSeekBarView) {
+      WaveFormSeekBarView waveFormView = (WaveFormSeekBarView) seekBar;
+      waveFormView.setColors(waveFormPlayedBarsColor, waveFormUnplayedBarsColor, waveFormThumbTint);
+      if (android.os.Build.VERSION.SDK_INT >= 23) {
+        new AudioWaveForm(getContext(), audio).getWaveForm(
+          data -> {
+            durationMillis = data.getDuration(TimeUnit.MILLISECONDS);
+            updateProgress(0, 0);
+            if (!forceHideDuration && duration != null) {
+              duration.setVisibility(VISIBLE);
+            }
+            waveFormView.setWaveData(data.getWaveForm());
+          },
+          () -> waveFormView.setWaveMode(false));
+      } else {
+        waveFormView.setWaveMode(false);
+        if (duration != null) {
+          duration.setVisibility(GONE);
+        }
+      }
+    }
+
+    if (forceHideDuration && duration != null) {
+      duration.setVisibility(View.GONE);
     }
   }
 
@@ -153,21 +203,82 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
     this.downloadListener = listener;
   }
 
-  @Override
-  public void onStart() {
+  public @Nullable Uri getAudioSlideUri() {
+    if (audioSlide != null) return audioSlide.getUri();
+    else                    return null;
+  }
+
+  private void onPlaybackState(@NonNull VoiceNotePlaybackState voiceNotePlaybackState) {
+    onDuration(voiceNotePlaybackState.getUri(), voiceNotePlaybackState.getTrackDuration());
+    onStart(voiceNotePlaybackState.getUri(), voiceNotePlaybackState.isAutoReset());
+    onProgress(voiceNotePlaybackState.getUri(),
+               (double) voiceNotePlaybackState.getPlayheadPositionMillis() / voiceNotePlaybackState.getTrackDuration(),
+               voiceNotePlaybackState.getPlayheadPositionMillis());
+  }
+
+  private void onDuration(@NonNull Uri uri, long durationMillis) {
+    if (isTarget(uri)) {
+      this.durationMillis = durationMillis;
+    }
+  }
+
+  private void onStart(@NonNull Uri uri, boolean autoReset) {
+    if (!isTarget(uri)) {
+      if (hasAudioUri()) {
+        onStop(audioSlide.getUri(), autoReset);
+      }
+
+      return;
+    }
+
+    if (isPlaying) {
+      return;
+    }
+
     isPlaying = true;
     togglePlayToPause();
   }
 
-  @Override
-  public void onStop() {
+  private void onStop(@NonNull Uri uri, boolean autoReset) {
+    if (!isTarget(uri)) {
+      return;
+    }
+
+    if (!isPlaying) {
+      return;
+    }
+
     isPlaying = false;
     togglePauseToPlay();
 
-    if (autoRewind || seekBar.getProgress() + 5 >= seekBar.getMax()) {
+    if (autoReset || autoRewind || seekBar.getProgress() + 5 >= seekBar.getMax()) {
       backwardsCounter = 4;
       rewind();
     }
+  }
+
+  private void onProgress(@NonNull Uri uri, double progress, long millis) {
+    if (!isTarget(uri)) {
+      return;
+    }
+
+    int seekProgress = (int) Math.floor(progress * seekBar.getMax());
+
+    if (seekProgress > seekBar.getProgress() || backwardsCounter > 3) {
+      backwardsCounter = 0;
+      seekBar.setProgress(seekProgress);
+      updateProgress((float) progress, millis);
+    } else {
+      backwardsCounter++;
+    }
+  }
+
+  private boolean isTarget(@NonNull Uri uri) {
+    return hasAudioUri() && Objects.equals(uri, audioSlide.getUri());
+  }
+
+  private boolean hasAudioUri() {
+    return audioSlide != null && audioSlide.getUri() != null;
   }
 
   @Override
@@ -196,24 +307,14 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
     this.downloadButton.setEnabled(enabled);
   }
 
-  @Override
-  public void onProgress(double progress, long millis) {
-    int seekProgress = (int) Math.floor(progress * seekBar.getMax());
-
-    if (seekProgress > seekBar.getProgress() || backwardsCounter > 3) {
-      backwardsCounter = 0;
-      seekBar.setProgress(seekProgress);
-      updateProgress((float) progress, millis);
-    } else {
-      backwardsCounter++;
-    }
-  }
-
   private void updateProgress(float progress, long millis) {
-    if (timestamp != null) {
-      timestamp.setText(String.format(Locale.getDefault(), "%02d:%02d",
-                                      TimeUnit.MILLISECONDS.toMinutes(millis),
-                                      TimeUnit.MILLISECONDS.toSeconds(millis)));
+    if (callbacks != null) {
+      callbacks.onProgressUpdated(durationMillis, millis);
+    }
+
+    if (duration != null && durationMillis > 0) {
+      long remainingSecs = TimeUnit.MILLISECONDS.toSeconds(durationMillis - millis);
+      duration.setText(getResources().getString(R.string.AudioView_duration, remainingSecs / 60, remainingSecs % 60));
     }
 
     if (smallView) {
@@ -221,7 +322,7 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
     }
   }
 
-  public void setTint(int foregroundTint, int backgroundTint) {
+  public void setTint(int foregroundTint) {
     post(()-> this.playPauseButton.addValueCallback(new KeyPath("**"),
                                                     LottieProperty.COLOR_FILTER,
                                                     new LottieValueCallback<>(new SimpleColorFilter(foregroundTint))));
@@ -229,8 +330,8 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
     this.downloadButton.setColorFilter(foregroundTint, PorterDuff.Mode.SRC_IN);
     this.circleProgress.setBarColor(foregroundTint);
 
-    if (this.timestamp != null) {
-      this.timestamp.setTextColor(foregroundTint);
+    if (this.duration != null) {
+      this.duration.setTextColor(foregroundTint);
     }
     this.seekBar.getProgressDrawable().setColorFilter(foregroundTint, PorterDuff.Mode.SRC_IN);
     this.seekBar.getThumb().setColorFilter(foregroundTint, PorterDuff.Mode.SRC_IN);
@@ -270,44 +371,35 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
   }
 
   private void showPlayButton() {
-    if (!smallView || seekBar.getProgress() == 0) {
+    if (!smallView) {
+      circleProgress.setVisibility(GONE);
+    } else if (seekBar.getProgress() == 0) {
       circleProgress.setInstantProgress(1);
     }
-    circleProgress.setVisibility(VISIBLE);
     playPauseButton.setVisibility(VISIBLE);
     controlToggle.displayQuick(progressAndPlay);
   }
 
   public void stopPlaybackAndReset() {
-    if (this.audioSlidePlayer != null && isPlaying) {
-      this.audioSlidePlayer.stop();
-      togglePauseToPlay();
+    if (audioSlide == null || audioSlide.getUri() == null) return;
+
+    if (callbacks != null) {
+      callbacks.onStopAndReset(audioSlide.getUri());
+      rewind();
     }
-    rewind();
   }
 
   private class PlayPauseClickedListener implements View.OnClickListener {
 
     @Override
     public void onClick(View v) {
-      if (lottieDirection == REVERSE) {
-        try {
-          Log.d(TAG, "playbutton onClick");
-          if (audioSlidePlayer != null) {
-            togglePlayToPause();
-            audioSlidePlayer.play(getProgress());
-          }
-        } catch (IOException e) {
-          Log.w(TAG, e);
-        }
-      } else {
-        Log.d(TAG, "pausebutton onClick");
-        if (audioSlidePlayer != null) {
-          togglePauseToPlay();
-          audioSlidePlayer.stop();
-          if (autoRewind) {
-            rewind();
-          }
+      if (audioSlide == null || audioSlide.getUri() == null) return;
+
+      if (callbacks != null) {
+        if (lottieDirection == REVERSE) {
+          callbacks.onPlay(audioSlide.getUri(), getProgress());
+        } else {
+          callbacks.onPause(audioSlide.getUri());
         }
       }
     }
@@ -336,24 +428,29 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
     private boolean wasPlaying;
 
     @Override
-    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {}
+    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+    }
 
     @Override
     public synchronized void onStartTrackingTouch(SeekBar seekBar) {
+      if (audioSlide == null || audioSlide.getUri() == null) return;
+
       wasPlaying = isPlaying;
-      if (audioSlidePlayer != null && isPlaying) {
-        audioSlidePlayer.stop();
+      if (isPlaying) {
+        if (callbacks != null) {
+          callbacks.onPause(audioSlide.getUri());
+        }
       }
     }
 
     @Override
     public synchronized void onStopTrackingTouch(SeekBar seekBar) {
-      try {
-        if (audioSlidePlayer != null && wasPlaying) {
-          audioSlidePlayer.play(getProgress());
+      if (audioSlide == null || audioSlide.getUri() == null) return;
+
+      if (callbacks != null) {
+        if (wasPlaying) {
+          callbacks.onSeekTo(audioSlide.getUri(), getProgress());
         }
-      } catch (IOException e) {
-        Log.w(TAG, e);
       }
     }
   }
@@ -367,9 +464,16 @@ public final class AudioView extends FrameLayout implements AudioSlidePlayer.Lis
 
   @Subscribe(sticky = true, threadMode = ThreadMode.MAIN)
   public void onEventAsync(final PartProgressEvent event) {
-    if (audioSlidePlayer != null && event.attachment.equals(audioSlidePlayer.getAudioSlide().asAttachment())) {
+    if (audioSlide != null && event.attachment.equals(audioSlide.asAttachment())) {
       circleProgress.setInstantProgress(((float) event.progress) / event.total);
     }
   }
 
+  public interface Callbacks {
+    void onPlay(@NonNull Uri audioUri, double progress);
+    void onPause(@NonNull Uri audioUri);
+    void onSeekTo(@NonNull Uri audioUri, double progress);
+    void onStopAndReset(@NonNull Uri audioUri);
+    void onProgressUpdated(long durationMillis, long playheadMillis);
+  }
 }

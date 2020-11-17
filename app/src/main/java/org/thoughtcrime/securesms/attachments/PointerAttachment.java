@@ -4,6 +4,7 @@ import android.net.Uri;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.thoughtcrime.securesms.audio.AudioHash;
 import org.thoughtcrime.securesms.blurhash.BlurHash;
 import org.thoughtcrime.securesms.database.AttachmentDatabase;
 import org.thoughtcrime.securesms.stickers.StickerLocator;
@@ -17,28 +18,33 @@ import java.util.List;
 
 public class PointerAttachment extends Attachment {
 
-  private PointerAttachment(@NonNull String contentType, int transferState, long size,
-                            @Nullable String fileName, int cdnNumber, @NonNull String location,
-                            @Nullable String key, @Nullable String relay,
-                            @Nullable byte[] digest, @Nullable String fastPreflightId, boolean voiceNote,
-                            int width, int height, long uploadTimestamp, @Nullable String caption, @Nullable StickerLocator stickerLocator,
+  private PointerAttachment(@NonNull String contentType,
+                            int transferState,
+                            long size,
+                            @Nullable String fileName,
+                            int cdnNumber,
+                            @NonNull String location,
+                            @Nullable String key,
+                            @Nullable String relay,
+                            @Nullable byte[] digest,
+                            @Nullable String fastPreflightId,
+                            boolean voiceNote,
+                            boolean borderless,
+                            int width,
+                            int height,
+                            long uploadTimestamp,
+                            @Nullable String caption,
+                            @Nullable StickerLocator stickerLocator,
                             @Nullable BlurHash blurHash)
   {
-    super(contentType, transferState, size, fileName, cdnNumber, location, key, relay, digest, fastPreflightId, voiceNote, width, height, false, uploadTimestamp, caption, stickerLocator, blurHash, null);
+    super(contentType, transferState, size, fileName, cdnNumber, location, key, relay, digest, fastPreflightId, voiceNote, borderless, width, height, false, uploadTimestamp, caption, stickerLocator, blurHash, null, null);
   }
 
   @Nullable
   @Override
-  public Uri getDataUri() {
+  public Uri getUri() {
     return null;
   }
-
-  @Nullable
-  @Override
-  public Uri getThumbnailUri() {
-    return null;
-  }
-
 
   public static List<Attachment> forPointers(Optional<List<SignalServiceAttachment>> pointers) {
     List<Attachment> results = new LinkedList<>();
@@ -90,21 +96,22 @@ public class PointerAttachment extends Attachment {
     }
 
     return Optional.of(new PointerAttachment(pointer.get().getContentType(),
-                                      AttachmentDatabase.TRANSFER_PROGRESS_PENDING,
-                                      pointer.get().asPointer().getSize().or(0),
-                                      pointer.get().asPointer().getFileName().orNull(),
-                                      pointer.get().asPointer().getCdnNumber(),
-                                      pointer.get().asPointer().getRemoteId().toString(),
-                                      encodedKey, null,
-                                      pointer.get().asPointer().getDigest().orNull(),
-                                      fastPreflightId,
-                                      pointer.get().asPointer().getVoiceNote(),
-                                      pointer.get().asPointer().getWidth(),
-                                      pointer.get().asPointer().getHeight(),
-                                      pointer.get().asPointer().getUploadTimestamp(),
-                                      pointer.get().asPointer().getCaption().orNull(),
-                                      stickerLocator,
-                                      BlurHash.parseOrNull(pointer.get().asPointer().getBlurHash().orNull())));
+                                             AttachmentDatabase.TRANSFER_PROGRESS_PENDING,
+                                             pointer.get().asPointer().getSize().or(0),
+                                             pointer.get().asPointer().getFileName().orNull(),
+                                             pointer.get().asPointer().getCdnNumber(),
+                                             pointer.get().asPointer().getRemoteId().toString(),
+                                             encodedKey, null,
+                                             pointer.get().asPointer().getDigest().orNull(),
+                                             fastPreflightId,
+                                             pointer.get().asPointer().getVoiceNote(),
+                                             pointer.get().asPointer().isBorderless(),
+                                             pointer.get().asPointer().getWidth(),
+                                             pointer.get().asPointer().getHeight(),
+                                             pointer.get().asPointer().getUploadTimestamp(),
+                                             pointer.get().asPointer().getCaption().orNull(),
+                                             stickerLocator,
+                                             BlurHash.parseOrNull(pointer.get().asPointer().getBlurHash().orNull())));
 
   }
 
@@ -121,6 +128,7 @@ public class PointerAttachment extends Attachment {
                                              null,
                                              thumbnail != null ? thumbnail.asPointer().getDigest().orNull() : null,
                                              null,
+                                             false,
                                              false,
                                              thumbnail != null ? thumbnail.asPointer().getWidth() : 0,
                                              thumbnail != null ? thumbnail.asPointer().getHeight() : 0,

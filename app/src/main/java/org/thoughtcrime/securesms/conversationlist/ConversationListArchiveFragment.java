@@ -17,14 +17,9 @@
 package org.thoughtcrime.securesms.conversationlist;
 
 import android.annotation.SuppressLint;
-import android.database.Cursor;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
 import android.view.View;
-import android.view.ViewGroup;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.MenuRes;
@@ -35,22 +30,21 @@ import androidx.annotation.WorkerThread;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.view.ActionMode;
 import androidx.appcompat.widget.Toolbar;
-import androidx.loader.app.LoaderManager;
-import androidx.loader.content.Loader;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.snackbar.Snackbar;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.registration.PulsingFloatingActionButton;
-import org.thoughtcrime.securesms.conversationlist.ConversationListAdapter.ItemClickListener;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
-import org.thoughtcrime.securesms.database.loaders.ConversationListLoader;
+import org.thoughtcrime.securesms.tracing.Trace;
 import org.thoughtcrime.securesms.util.task.SnackbarAsyncTask;
 
+import java.util.Set;
 
-public class ConversationListArchiveFragment extends ConversationListFragment
-  implements LoaderManager.LoaderCallbacks<Cursor>, ActionMode.Callback, ItemClickListener
+
+@Trace
+public class ConversationListArchiveFragment extends ConversationListFragment implements ActionMode.Callback
 {
   private RecyclerView                list;
   private View                        emptyState;
@@ -71,10 +65,10 @@ public class ConversationListArchiveFragment extends ConversationListFragment
   public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
     super.onViewCreated(view, savedInstanceState);
 
-    list          = view.findViewById(R.id.list);
-    fab           = view.findViewById(R.id.fab);
-    cameraFab     = view.findViewById(R.id.camera_fab);
-    emptyState    = view.findViewById(R.id.empty_state);
+    list       = view.findViewById(R.id.list);
+    fab        = view.findViewById(R.id.fab);
+    cameraFab  = view.findViewById(R.id.camera_fab);
+    emptyState = view.findViewById(R.id.empty_state);
 
     ((AppCompatActivity) requireActivity()).getSupportActionBar().setDisplayHomeAsUpEnabled(true);
     Toolbar toolbar = view.findViewById(R.id.toolbar_basic);
@@ -86,16 +80,14 @@ public class ConversationListArchiveFragment extends ConversationListFragment
   }
 
   @Override
-  public @NonNull Loader<Cursor> onCreateLoader(int arg0, Bundle arg1) {
-    return new ConversationListLoader(getActivity(), null, true);
+  protected void onPostSubmitList() {
+    list.setVisibility(View.VISIBLE);
+    emptyState.setVisibility(View.GONE);
   }
 
   @Override
-  public void onLoadFinished(@NonNull Loader<Cursor> arg0, Cursor cursor) {
-    super.onLoadFinished(arg0, cursor);
-
-    list.setVisibility(View.VISIBLE);
-    emptyState.setVisibility(View.GONE);
+  protected boolean isArchived() {
+    return true;
   }
 
   @Override
@@ -119,23 +111,27 @@ public class ConversationListArchiveFragment extends ConversationListFragment
   }
 
   @Override
-  protected void archiveThread(long threadId) {
-    DatabaseFactory.getThreadDatabase(getActivity()).unarchiveConversation(threadId);
+  @WorkerThread
+  protected void archiveThreads(Set<Long> threadIds) {
+    DatabaseFactory.getThreadDatabase(getActivity()).setArchived(threadIds, false);
   }
 
+  @Override
   @WorkerThread
-  protected void reverseArchiveThread(long threadId) {
-    DatabaseFactory.getThreadDatabase(getActivity()).archiveConversation(threadId);
+  protected void reverseArchiveThreads(Set<Long> threadIds) {
+    DatabaseFactory.getThreadDatabase(getActivity()).setArchived(threadIds, true);
   }
 
   @SuppressLint("StaticFieldLeak")
   @Override
   protected void onItemSwiped(long threadId, int unreadCount) {
-    new SnackbarAsyncTask<Long>(getView(),
-        getResources().getQuantityString(R.plurals.ConversationListFragment_moved_conversations_to_inbox, 1, 1),
-        getString(R.string.ConversationListFragment_undo),
-        getResources().getColor(R.color.amber_500),
-        Snackbar.LENGTH_LONG, false)
+    new SnackbarAsyncTask<Long>(getViewLifecycleOwner().getLifecycle(),
+                                requireView(),
+                                getResources().getQuantityString(R.plurals.ConversationListFragment_moved_conversations_to_inbox, 1, 1),
+                                getString(R.string.ConversationListFragment_undo),
+                                getResources().getColor(R.color.amber_500),
+                                Snackbar.LENGTH_LONG,
+                                false)
     {
       @Override
       protected void executeAction(@Nullable Long parameter) {

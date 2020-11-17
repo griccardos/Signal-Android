@@ -4,22 +4,16 @@ import android.content.Context;
 import android.graphics.Typeface;
 
 import androidx.annotation.Nullable;
-import androidx.core.view.ViewCompat;
+
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
-import android.text.style.TypefaceSpan;
 import android.util.AttributeSet;
 
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.emoji.EmojiTextView;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.thoughtcrime.securesms.util.FeatureFlags;
-import org.thoughtcrime.securesms.util.ResUtil;
-import org.thoughtcrime.securesms.util.spans.CenterAlignedRelativeSizeSpan;
 
 public class FromTextView extends EmojiTextView {
 
@@ -42,7 +36,7 @@ public class FromTextView extends EmojiTextView {
   }
 
   public void setText(Recipient recipient, boolean read, @Nullable String suffix) {
-    String fromString = recipient.toShortString(getContext());
+    String fromString = recipient.getDisplayName(getContext());
 
     int typeface;
 
@@ -59,21 +53,8 @@ public class FromTextView extends EmojiTextView {
                      Spannable.SPAN_INCLUSIVE_EXCLUSIVE);
 
 
-    if (recipient.isLocalNumber()) {
+    if (recipient.isSelf()) {
       builder.append(getContext().getString(R.string.note_to_self));
-    } else if (!FeatureFlags.profileDisplay() && recipient.getName(getContext()) == null && !recipient.getProfileName().isEmpty()) {
-      SpannableString profileName = new SpannableString(" (~" + recipient.getProfileName().toString() + ") ");
-      profileName.setSpan(new CenterAlignedRelativeSizeSpan(0.75f), 0, profileName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-      profileName.setSpan(new TypefaceSpan("sans-serif-light"), 0, profileName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-      profileName.setSpan(new ForegroundColorSpan(ResUtil.getColor(getContext(), R.attr.conversation_list_item_subject_color)), 0, profileName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-
-      if (ViewCompat.getLayoutDirection(this) == ViewCompat.LAYOUT_DIRECTION_RTL){
-        builder.append(profileName);
-        builder.append(fromSpan);
-      } else {
-        builder.append(fromSpan);
-        builder.append(profileName);
-      }
     } else {
       builder.append(fromSpan);
     }

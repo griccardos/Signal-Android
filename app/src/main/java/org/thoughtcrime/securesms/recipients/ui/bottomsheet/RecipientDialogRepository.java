@@ -6,14 +6,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.util.Consumer;
 
+import org.thoughtcrime.securesms.contacts.sync.DirectoryHelper;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
+import org.thoughtcrime.securesms.database.GroupDatabase;
 import org.thoughtcrime.securesms.database.IdentityDatabase;
-import org.thoughtcrime.securesms.groups.GroupChangeBusyException;
-import org.thoughtcrime.securesms.groups.GroupChangeFailedException;
+import org.thoughtcrime.securesms.groups.GroupChangeException;
 import org.thoughtcrime.securesms.groups.GroupId;
-import org.thoughtcrime.securesms.groups.GroupInsufficientRightsException;
 import org.thoughtcrime.securesms.groups.GroupManager;
-import org.thoughtcrime.securesms.groups.GroupNotAMemberException;
 import org.thoughtcrime.securesms.groups.ui.GroupChangeErrorCallback;
 import org.thoughtcrime.securesms.groups.ui.GroupChangeFailureReason;
 import org.thoughtcrime.securesms.logging.Log;
@@ -23,6 +22,8 @@ import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 final class RecipientDialogRepository {
@@ -50,12 +51,11 @@ final class RecipientDialogRepository {
     return groupId;
   }
 
-  void getIdentity(@NonNull IdentityCallback callback) {
-    SimpleTask.run(SignalExecutors.BOUNDED,
-                   () -> DatabaseFactory.getIdentityDatabase(context)
-                                        .getIdentity(recipientId)
-                                        .orNull(),
-                   callback::remoteIdentity);
+  void getIdentity(@NonNull Consumer<IdentityDatabase.IdentityRecord> callback) {
+    SignalExecutors.BOUNDED.execute(
+      () -> callback.accept(DatabaseFactory.getIdentityDatabase(context)
+                                           .getIdentity(recipientId)
+                                           .orNull()));
   }
 
   void getRecipient(@NonNull RecipientCallback recipientCallback) {
@@ -64,10 +64,14 @@ final class RecipientDialogRepository {
                    recipientCallback::onRecipient);
   }
 
-  void getGroupName(@NonNull Consumer<String> stringConsumer) {
-    SimpleTask.run(SignalExecutors.BOUNDED,
-                   () -> DatabaseFactory.getGroupDatabase(context).requireGroup(Objects.requireNonNull(groupId)).getTitle(),
-                   stringConsumer::accept);
+  void refreshRecipient() {
+    SignalExecutors.UNBOUNDED.execute(() -> {
+      try {
+        DirectoryHelper.refreshDirectoryFor(context, Recipient.resolved(recipientId), false);
+      } catch (IOException e) {
+        Log.w(TAG, "Failed to refresh user after adding to contacts.");
+      }
+    });
   }
 
   void removeMember(@NonNull Consumer<Boolean> onComplete, @NonNull GroupChangeErrorCallback error) {
@@ -76,12 +80,9 @@ final class RecipientDialogRepository {
                      try {
                        GroupManager.ejectFromGroup(context, Objects.requireNonNull(groupId).requireV2(), Recipient.resolved(recipientId));
                        return true;
-                     } catch (GroupInsufficientRightsException | GroupNotAMemberException e) {
+                     } catch (GroupChangeException | IOException e) {
                        Log.w(TAG, e);
-                       error.onError(GroupChangeFailureReason.NO_RIGHTS);
-                     } catch (GroupChangeFailedException | GroupChangeBusyException | IOException e) {
-                       Log.w(TAG, e);
-                       error.onError(GroupChangeFailureReason.OTHER);
+                       error.onError(GroupChangeFailureReason.fromException(e));
                      }
                      return false;
                    },
@@ -94,20 +95,33 @@ final class RecipientDialogRepository {
                      try {
                        GroupManager.setMemberAdmin(context, Objects.requireNonNull(groupId).requireV2(), recipientId, admin);
                        return true;
-                     } catch (GroupInsufficientRightsException | GroupNotAMemberException e) {
+                     } catch (GroupChangeException | IOException e) {
                        Log.w(TAG, e);
-                       error.onError(GroupChangeFailureReason.NO_RIGHTS);
-                     } catch (GroupChangeFailedException | GroupChangeBusyException | IOException e) {
-                       Log.w(TAG, e);
-                       error.onError(GroupChangeFailureReason.OTHER);
+                       error.onError(GroupChangeFailureReason.fromException(e));
                      }
                      return false;
                    },
                    onComplete::accept);
   }
 
-  interface IdentityCallback {
-    void remoteIdentity(@Nullable IdentityDatabase.IdentityRecord identityRecord);
+  void getGroupMembership(@NonNull Consumer<List<RecipientId>> onComplete) {
+    SimpleTask.run(SignalExecutors.UNBOUNDED,
+                   () -> {
+                     GroupDatabase                   groupDatabase   = DatabaseFactory.getGroupDatabase(context);
+                     List<GroupDatabase.GroupRecord> groupRecords    = groupDatabase.getPushGroupsContainingMember(recipientId);
+                     ArrayList<RecipientId>          groupRecipients = new ArrayList<>(groupRecords.size());
+
+                     for (GroupDatabase.GroupRecord groupRecord : groupRecords) {
+                       groupRecipients.add(groupRecord.getRecipientId());
+                     }
+
+                     return groupRecipients;
+                   },
+                   onComplete::accept);
+  }
+
+  public void getActiveGroupCount(@NonNull Consumer<Integer> onComplete) {
+    SignalExecutors.BOUNDED.execute(() -> onComplete.accept(DatabaseFactory.getGroupDatabase(context).getActiveGroupCount()));
   }
 
   interface RecipientCallback {

@@ -10,7 +10,6 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import org.signal.zkgroup.InvalidInputException;
 import org.signal.zkgroup.profiles.ProfileKeyCredentialResponse;
 import org.whispersystems.libsignal.logging.Log;
-import org.whispersystems.signalservice.FeatureFlags;
 import org.whispersystems.signalservice.internal.util.JsonUtil;
 
 import java.util.UUID;
@@ -41,9 +40,6 @@ public class SignalServiceProfile {
 
   @JsonProperty
   private Capabilities capabilities;
-
-  @JsonProperty
-  private String username;
 
   @JsonProperty
   @JsonSerialize(using = JsonUtil.UuidSerializer.class)
@@ -82,10 +78,6 @@ public class SignalServiceProfile {
     return capabilities;
   }
 
-  public String getUsername() {
-    return username;
-  }
-
   public UUID getUuid() {
     return uuid;
   }
@@ -100,26 +92,16 @@ public class SignalServiceProfile {
 
   public static class Capabilities {
     @JsonProperty
-    private boolean uuid;
-
-    @JsonProperty
     private boolean gv2;
 
     @JsonProperty
     private boolean storage;
 
+    @JsonProperty("gv1-migration")
+    private boolean gv1Migration;
+
     @JsonCreator
     public Capabilities() {}
-
-    public Capabilities(boolean uuid, boolean gv2, boolean storage) {
-      this.uuid    = uuid;
-      this.gv2     = gv2;
-      this.storage = storage;
-    }
-
-    public boolean isUuid() {
-      return uuid;
-    }
 
     public boolean isGv2() {
       return gv2;
@@ -128,11 +110,13 @@ public class SignalServiceProfile {
     public boolean isStorage() {
       return storage;
     }
+
+    public boolean isGv1Migration() {
+      return gv1Migration;
+    }
   }
 
   public ProfileKeyCredentialResponse getProfileKeyCredentialResponse() {
-    if (!FeatureFlags.VERSIONED_PROFILES) return null;
-
     if (credential == null) return null;
 
     try {

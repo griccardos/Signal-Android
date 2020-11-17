@@ -11,20 +11,24 @@ import android.util.AttributeSet;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatImageView;
+import androidx.fragment.app.FragmentActivity;
 
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 
 import org.thoughtcrime.securesms.R;
-import org.thoughtcrime.securesms.RecipientPreferenceActivity;
 import org.thoughtcrime.securesms.color.MaterialColor;
 import org.thoughtcrime.securesms.contacts.avatars.ContactColors;
 import org.thoughtcrime.securesms.contacts.avatars.ContactPhoto;
 import org.thoughtcrime.securesms.contacts.avatars.ResourceContactPhoto;
+import org.thoughtcrime.securesms.groups.ui.managegroup.ManageGroupActivity;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 import org.thoughtcrime.securesms.recipients.Recipient;
+import org.thoughtcrime.securesms.recipients.ui.bottomsheet.RecipientBottomSheetDialogFragment;
+import org.thoughtcrime.securesms.recipients.ui.managerecipient.ManageRecipientActivity;
 import org.thoughtcrime.securesms.util.AvatarUtil;
 import org.thoughtcrime.securesms.util.ThemeUtil;
+import org.thoughtcrime.securesms.util.Util;
 
 import java.util.Objects;
 
@@ -109,13 +113,23 @@ public final class AvatarImageView extends AppCompatImageView {
     this.fallbackPhotoProvider = fallbackPhotoProvider;
   }
 
+  /**
+   * Shows self as the actual profile picture.
+   */
   public void setRecipient(@NonNull Recipient recipient) {
-    if (recipient.isLocalNumber()) {
+    if (recipient.isSelf()) {
       setAvatar(GlideApp.with(this), null, false);
       AvatarUtil.loadIconIntoImageView(recipient, this);
     } else {
       setAvatar(GlideApp.with(this), recipient, false);
     }
+  }
+
+  /**
+   * Shows self as the note to self icon.
+   */
+  public void setAvatar(@Nullable Recipient recipient) {
+    setAvatar(GlideApp.with(this), recipient, false);
   }
 
   public void setAvatar(@NonNull GlideRequests requestManager, @Nullable Recipient recipient, boolean quickContactEnabled) {
@@ -157,13 +171,44 @@ public final class AvatarImageView extends AppCompatImageView {
     }
   }
 
-  private void setAvatarClickHandler(final Recipient recipient, boolean quickContactEnabled) {
+  private void setAvatarClickHandler(@NonNull final Recipient recipient, boolean quickContactEnabled) {
     if (quickContactEnabled) {
-      super.setOnClickListener(v -> getContext().startActivity(RecipientPreferenceActivity.getLaunchIntent(getContext(), recipient.getId())));
+      super.setOnClickListener(v -> {
+        Context context = getContext();
+        if (recipient.isPushGroup()) {
+          context.startActivity(ManageGroupActivity.newIntent(context, recipient.requireGroupId().requirePush()),
+                                ManageGroupActivity.createTransitionBundle(context, this));
+        } else {
+          if (context instanceof FragmentActivity) {
+            RecipientBottomSheetDialogFragment.create(recipient.getId(), null)
+                                              .show(((FragmentActivity) context).getSupportFragmentManager(), "BOTTOM");
+          } else {
+            context.startActivity(ManageRecipientActivity.newIntent(context, recipient.getId()),
+                                  ManageRecipientActivity.createTransitionBundle(context, this));
+          }
+        }
+      });
     } else {
       super.setOnClickListener(listener);
       setClickable(listener != null);
     }
+  }
+
+  public void setImageBytesForGroup(@Nullable byte[] avatarBytes,
+                                    @Nullable Recipient.FallbackPhotoProvider fallbackPhotoProvider,
+                                    @NonNull MaterialColor color)
+  {
+    Drawable fallback = Util.firstNonNull(fallbackPhotoProvider, Recipient.DEFAULT_FALLBACK_PHOTO_PROVIDER)
+                            .getPhotoForGroup()
+                            .asDrawable(getContext(), color.toAvatarColor(getContext()));
+
+    GlideApp.with(this)
+            .load(avatarBytes)
+            .fallback(fallback)
+            .error(fallback)
+            .diskCacheStrategy(DiskCacheStrategy.ALL)
+            .circleCrop()
+            .into(this);
   }
 
   private static class RecipientContactPhoto {

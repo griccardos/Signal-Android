@@ -1,6 +1,5 @@
 package org.thoughtcrime.securesms.profiles.edit;
 
-import android.Manifest;
 import android.animation.Animator;
 import android.content.Context;
 import android.content.Intent;
@@ -11,7 +10,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewAnimationUtils;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -22,33 +20,32 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.annotation.StringRes;
 import androidx.appcompat.widget.Toolbar;
-import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProviders;
 import androidx.navigation.NavDirections;
 import androidx.navigation.Navigation;
 
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.dd.CircularProgressButton;
-import com.google.android.gms.common.util.IOUtils;
 
+import org.thoughtcrime.securesms.LoggingFragment;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.contacts.avatars.ResourceContactPhoto;
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.groups.GroupId;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mediasend.AvatarSelectionActivity;
 import org.thoughtcrime.securesms.mediasend.AvatarSelectionBottomSheetDialogFragment;
 import org.thoughtcrime.securesms.mediasend.Media;
-import org.thoughtcrime.securesms.megaphone.Megaphones;
 import org.thoughtcrime.securesms.mms.GlideApp;
-import org.thoughtcrime.securesms.permissions.Permissions;
 import org.thoughtcrime.securesms.profiles.ProfileName;
 import org.thoughtcrime.securesms.providers.BlobProvider;
 import org.thoughtcrime.securesms.registration.RegistrationUtil;
+import org.thoughtcrime.securesms.util.CommunicationActions;
 import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.StringUtil;
+import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
 import org.thoughtcrime.securesms.util.text.AfterTextChanged;
+import org.thoughtcrime.securesms.util.views.LearnMoreTextView;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.io.IOException;
@@ -62,10 +59,9 @@ import static org.thoughtcrime.securesms.profiles.edit.EditProfileActivity.NEXT_
 import static org.thoughtcrime.securesms.profiles.edit.EditProfileActivity.NEXT_INTENT;
 import static org.thoughtcrime.securesms.profiles.edit.EditProfileActivity.SHOW_TOOLBAR;
 
-public class EditProfileFragment extends Fragment {
+public class EditProfileFragment extends LoggingFragment {
 
   private static final String TAG                        = Log.tag(EditProfileFragment.class);
-  private static final String AVATAR_STATE               = "avatar";
   private static final short  REQUEST_CODE_SELECT_AVATAR = 31726;
   private static final int    MAX_GROUP_NAME_LENGTH      = 32;
 
@@ -131,29 +127,12 @@ public class EditProfileFragment extends Fragment {
     initializeProfileAvatar();
     initializeProfileName();
     initializeUsername();
-
-    if (groupId == null) {
-      requireActivity().getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
-    }
   }
 
   @Override
-  public void onSaveInstanceState(@NonNull Bundle outState) {
-    outState.putByteArray(AVATAR_STATE, viewModel.getAvatarSnapshot());
-  }
-
-  @Override
-  public void onViewStateRestored(@Nullable Bundle savedInstanceState) {
-    super.onViewStateRestored(savedInstanceState);
-
-    if (savedInstanceState != null && savedInstanceState.containsKey(AVATAR_STATE)) {
-      viewModel.setAvatar(savedInstanceState.getByteArray(AVATAR_STATE));
-    }
-  }
-
-  @Override
-  public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-    Permissions.onRequestPermissionsResult(this, requestCode, permissions, grantResults);
+  public void onResume() {
+    super.onResume();
+    viewModel.refreshUsername();
   }
 
   @Override
@@ -173,7 +152,7 @@ public class EditProfileFragment extends Fragment {
           Media       result = data.getParcelableExtra(AvatarSelectionActivity.EXTRA_MEDIA);
           InputStream stream = BlobProvider.getInstance().getStream(requireContext(), result.getUri());
 
-          return IOUtils.readInputStreamFully(stream);
+          return Util.readFully(stream);
         } catch (IOException ioException) {
           Log.w(TAG, ioException);
           return null;
@@ -206,7 +185,8 @@ public class EditProfileFragment extends Fragment {
 
     EditProfileViewModel.Factory factory = new EditProfileViewModel.Factory(repository, hasSavedInstanceState, groupId);
 
-    viewModel = ViewModelProviders.of(this, factory).get(EditProfileViewModel.class);
+    viewModel = ViewModelProviders.of(requireActivity(), factory)
+                                  .get(EditProfileViewModel.class);
   }
 
   private void initializeResources(@NonNull View view, boolean isEditingGroup) {
@@ -231,11 +211,7 @@ public class EditProfileFragment extends Fragment {
       usernameLabel.setVisibility(View.VISIBLE);
     }
 
-    this.avatar.setOnClickListener(v -> Permissions.with(this)
-               .request(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-               .ifNecessary()
-               .onAnyResult(this::startAvatarSelection)
-               .execute());
+    this.avatar.setOnClickListener(v -> startAvatarSelection());
 
     this.givenName .addTextChangedListener(new AfterTextChanged(s -> {
                                                                        trimInPlace(s, isEditingGroup);
@@ -244,6 +220,7 @@ public class EditProfileFragment extends Fragment {
 
     if (isEditingGroup) {
       givenName.setHint(R.string.EditProfileFragment__group_name);
+      givenName.requestFocus();
       toolbar.setTitle(R.string.EditProfileFragment__edit_group_name_and_photo);
       preview.setVisibility(View.GONE);
       familyName.setVisibility(View.GONE);
@@ -255,6 +232,9 @@ public class EditProfileFragment extends Fragment {
                                                                          trimInPlace(s, false);
                                                                          viewModel.setFamilyName(s.toString());
                                                                        }));
+      LearnMoreTextView descriptionText = view.findViewById(R.id.description_text);
+      descriptionText.setLearnMoreVisible(true);
+      descriptionText.setOnLinkClickListener(v -> CommunicationActions.openBrowserLink(requireContext(), getString(R.string.EditProfileFragment__support_link)));
     }
 
     this.finishButton.setOnClickListener(v -> {
@@ -335,9 +315,7 @@ public class EditProfileFragment extends Fragment {
   private void handleUpload() {
     viewModel.submitProfile(uploadResult -> {
       if (uploadResult == EditProfileRepository.UploadResult.SUCCESS) {
-        RegistrationUtil.markRegistrationPossiblyComplete();
-
-        ApplicationDependencies.getMegaphoneRepository().markFinished(Megaphones.Event.PROFILE_NAMES_FOR_ALL);
+        RegistrationUtil.maybeMarkRegistrationComplete(requireContext());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) handleFinishedLollipop();
         else                                                       handleFinishedLegacy();

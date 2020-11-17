@@ -26,7 +26,8 @@ import android.os.Bundle;
 import androidx.core.app.RemoteInput;
 
 import org.thoughtcrime.securesms.database.DatabaseFactory;
-import org.thoughtcrime.securesms.database.MessagingDatabase.MarkedMessageInfo;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
+import org.thoughtcrime.securesms.database.MessageDatabase.MarkedMessageInfo;
 import org.thoughtcrime.securesms.mms.OutgoingMediaMessage;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientId;
@@ -59,7 +60,7 @@ public class RemoteReplyReceiver extends BroadcastReceiver {
 
     final RecipientId  recipientId  = intent.getParcelableExtra(RECIPIENT_EXTRA);
     final ReplyMethod  replyMethod  = (ReplyMethod) intent.getSerializableExtra(REPLY_METHOD);
-    final CharSequence responseText = remoteInput.getCharSequence(MessageNotifier.EXTRA_REMOTE_REPLY);
+    final CharSequence responseText = remoteInput.getCharSequence(DefaultMessageNotifier.EXTRA_REMOTE_REPLY);
 
     if (recipientId == null) throw new AssertionError("No recipientId specified");
     if (replyMethod == null) throw new AssertionError("No reply method specified");
@@ -76,7 +77,20 @@ public class RemoteReplyReceiver extends BroadcastReceiver {
 
           switch (replyMethod) {
             case GroupMessage: {
-              OutgoingMediaMessage reply = new OutgoingMediaMessage(recipient, responseText.toString(), new LinkedList<>(), System.currentTimeMillis(), subscriptionId, expiresIn, false, 0, null, Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+              OutgoingMediaMessage reply = new OutgoingMediaMessage(recipient,
+                                                                    responseText.toString(),
+                                                                    new LinkedList<>(),
+                                                                    System.currentTimeMillis(),
+                                                                    subscriptionId,
+                                                                    expiresIn,
+                                                                    false,
+                                                                    0,
+                                                                    null,
+                                                                    Collections.emptyList(),
+                                                                    Collections.emptyList(),
+                                                                    Collections.emptyList(),
+                                                                    Collections.emptyList(),
+                                                                    Collections.emptyList());
               threadId = MessageSender.send(context, reply, -1, false, null);
               break;
             }
@@ -96,7 +110,7 @@ public class RemoteReplyReceiver extends BroadcastReceiver {
 
           List<MarkedMessageInfo> messageIds = DatabaseFactory.getThreadDatabase(context).setRead(threadId, true);
 
-          MessageNotifier.updateNotification(context);
+          ApplicationDependencies.getMessageNotifier().updateNotification(context);
           MarkReadReceiver.process(context, messageIds);
 
           return null;

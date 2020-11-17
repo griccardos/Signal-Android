@@ -59,7 +59,7 @@
   <string name="AttachmentManager_signal_requires_contacts_permission_in_order_to_attach_contact_information">На Signal му е потребна дозвола до контактите за да можете да прикачете информации на контакти, но моментално пристапот е одбиен. Ве молиме продолжете до менито за подесување на апликациите, селектирајте \"Дозволи\", и дозволете \"Контакти\".</string>
   <!--AudioSlidePlayer-->
   <!--BlockedContactsActivity-->
-  <string name="BlockedContactsActivity_blocked_contacts">Блокирани контакти</string>
+  <!-- Removed by excludeNonTranslatables <string name="BlockedContactsActivity_blocked_contacts">Блокирани контакти</string> -->
   <!--BucketedThreadMedia-->
   <!--CallScreen-->
   <string name="CallScreen_Incoming_call">Доаѓачки повик</string>
@@ -90,8 +90,8 @@
   <string name="ConversationActivity_invalid_recipient">Погрешен примател!</string>
   <string name="ConversationActivity_calls_not_supported">Неподдржан повик</string>
   <string name="ConversationActivity_this_device_does_not_appear_to_support_dial_actions">Овој уред не поддржува повици.</string>
-  <string name="ConversationActivity_leave_group">Напушти група?</string>
-  <string name="ConversationActivity_are_you_sure_you_want_to_leave_this_group">Дали сте сигурни дека сакате да ја напуштите групата?</string>
+  <!-- Removed by excludeNonTranslatables <string name="ConversationActivity_leave_group">Напушти група?</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="ConversationActivity_are_you_sure_you_want_to_leave_this_group">Дали сте сигурни дека сакате да ја напуштите групата?</string> -->
   <string name="ConversationActivity_transport_insecure_sms">Незаштитена SMS порака</string>
   <string name="ConversationActivity_transport_insecure_mms">Незаштитена MMS порака</string>
   <string name="ConversationActivity_transport_signal">Signal</string>
@@ -141,15 +141,15 @@
   <!--GiphyActivity-->
   <!--GiphyFragmentPageAdapter-->
   <!--GroupCreateActivity-->
-  <string name="GroupCreateActivity_actionbar_title">Нова група</string>
-  <string name="GroupCreateActivity_group_name_hint">Наслов на група</string>
-  <string name="GroupCreateActivity_actionbar_mms_title">Нова MMS група</string>
-  <string name="GroupCreateActivity_contacts_no_members">Потребен е најмалку еден член во вашата група!</string>
-  <string name="GroupCreateActivity_contacts_invalid_number">Еден член на вашата група има број којшто не може да се прочита правилно. Исправете го или отстранете го тој контакт и пробајте повторно.</string>
-  <string name="GroupCreateActivity_avatar_content_description">Групен аватар</string>
-  <string name="GroupCreateActivity_creating_group">Се креира %1$s…</string>
-  <string name="GroupCreateActivity_updating_group">Се ажурира %1$s…</string>
-  <string name="GroupCreateActivity_loading_group_details">Вчитување на детали за групата…</string>
+  <!-- Removed by excludeNonTranslatables <string name="GroupCreateActivity_actionbar_title">Нова група</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="GroupCreateActivity_group_name_hint">Наслов на група</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="GroupCreateActivity_actionbar_mms_title">Нова MMS група</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="GroupCreateActivity_contacts_no_members">Потребен е најмалку еден член во вашата група!</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="GroupCreateActivity_contacts_invalid_number">Еден член на вашата група има број којшто не може да се прочита правилно. Исправете го или отстранете го тој контакт и пробајте повторно.</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="GroupCreateActivity_avatar_content_description">Групен аватар</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="GroupCreateActivity_creating_group">Се креира %1$s…</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="GroupCreateActivity_updating_group">Се ажурира %1$s…</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="GroupCreateActivity_loading_group_details">Вчитување на детали за групата…</string> -->
   <!--GroupShareProfileView-->
   <!--GroupMembersDialog-->
   <!-- Removed by excludeNonTranslatables <string name="GroupMembersDialog_me">Јас</string> -->
@@ -157,7 +157,7 @@
   <!--InviteActivity-->
   <!--Job-->
   <!--MessageDetailsRecipient-->
-  <string name="MessageDetailsRecipient_failed_to_send">Неуспешно праќање</string>
+  <!-- Removed by excludeNonTranslatables <string name="MessageDetailsRecipient_failed_to_send">Неуспешно праќање</string> -->
   <!--LongMessageActivity-->
   <!--MessageRetrievalService-->
   <string name="MessageRetrievalService_signal">Signal</string>
@@ -182,16 +182,16 @@
   <!--MessageRecord-->
   <string name="MessageRecord_message_encrypted_with_a_legacy_protocol_version_that_is_no_longer_supported">Добивте порака која е енкриптирана користејќи стара верзија на Signal која веќе не е поддржана. Ве молиме побајте од праќачот пораката да ја апдејтира апликацијата на најновата верзија и пак да ја препрати пораката.</string>
   <string name="MessageRecord_left_group">Ја напуштивте групата.</string>
-  <string name="MessageRecord_s_called_you">%s ве повика</string>
+  <!-- Removed by excludeNonTranslatables <string name="MessageRecord_s_called_you">%s ве повика</string> -->
   <string name="MessageRecord_called_s">Повикан %s</string>
-  <string name="MessageRecord_missed_call_from">Пропуштен повик од %s</string>
+  <!-- Removed by excludeNonTranslatables <string name="MessageRecord_missed_call_from">Пропуштен повик од %s</string> -->
   <!--PassphraseChangeActivity-->
   <string name="PassphraseChangeActivity_passphrases_dont_match_exclamation">Тајните фрази не се идентични!</string>
   <string name="PassphraseChangeActivity_incorrect_old_passphrase_exclamation">Погрешна стара лозинка!</string>
   <string name="PassphraseChangeActivity_enter_new_passphrase_exclamation">Внесете нова лозинка!</string>
   <!--DeviceProvisioningActivity-->
   <string name="DeviceProvisioningActivity_link_this_device">Поврзете го овај уред?</string>
-  <string name="DeviceProvisioningActivity_cancel">ОТКАЖИ</string>
+  <!-- Removed by excludeNonTranslatables <string name="DeviceProvisioningActivity_cancel">ОТКАЖИ</string> -->
   <string name="DeviceProvisioningActivity_continue">ПРОДОЛЖИ</string>
   <string name="DeviceProvisioningActivity_content_intro">Ќе може</string>
   <string name="DeviceProvisioningActivity_content_bullets">
@@ -263,7 +263,7 @@
   <string name="ThreadRecord_draft">Скица:</string>
   <!--UpdateApkReadyListener-->
   <!--UnknownSenderView-->
-  <string name="UnknownSenderView_block">Блокирај</string>
+  <!-- Removed by excludeNonTranslatables <string name="UnknownSenderView_block">Блокирај</string> -->
   <!--UntrustedSendDialog-->
   <!--UnverifiedSendDialog-->
   <!--VerifyIdentityActivity-->
@@ -379,12 +379,12 @@
   <!--profile_create_activity-->
   <!--recipient_preferences_activity-->
   <!--recipient_preferences-->
-  <string name="recipient_preferences__mute_conversation">Безгласен разговор</string>
-  <string name="recipient_preferences__vibrate">Вибрирај</string>
-  <string name="recipient_preferences__block">Блокирај</string>
-  <string name="recipient_preferences__color">Боја</string>
-  <string name="recipient_preferences__privacy">Приватност</string>
-  <string name="recipient_preferences__ringtone">Звук за звонење</string>
+  <!-- Removed by excludeNonTranslatables <string name="recipient_preferences__mute_conversation">Безгласен разговор</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="recipient_preferences__vibrate">Вибрирај</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="recipient_preferences__block">Блокирај</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="recipient_preferences__color">Боја</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="recipient_preferences__privacy">Приватност</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="recipient_preferences__ringtone">Звук за звонење</string> -->
   <!--- redphone_call_controls-->
   <!--registration_activity-->
   <string name="registration_activity__phone_number">ТЕЛЕФОНСКИ БРОЈ</string>
@@ -399,9 +399,9 @@
   <string name="message_details_header__sent">Испратено</string>
   <string name="message_details_header__received">Примено</string>
   <string name="message_details_header__via">Преку</string>
-  <string name="message_details_header__to">До:</string>
-  <string name="message_details_header__from">Од:</string>
-  <string name="message_details_header__with">Со:</string>
+  <!-- Removed by excludeNonTranslatables <string name="message_details_header__to">До:</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="message_details_header__from">Од:</string> -->
+  <!-- Removed by excludeNonTranslatables <string name="message_details_header__with">Со:</string> -->
   <!--AndroidManifest.xml-->
   <string name="AndroidManifest__create_passphrase">Креирај лозинка</string>
   <string name="AndroidManifest__select_contacts">Изберете контакти</string>
@@ -471,7 +471,7 @@
   <string name="preferences__mmsc_password">MMSC лозинка</string>
   <string name="preferences__sms_delivery_reports">SMS потврда за достава</string>
   <string name="preferences__request_a_delivery_report_for_each_sms_message_you_send">Побарајте доставна потврда за секоја испратена SMS порака</string>
-  <string name="preferences__delete_old_messages">Избришете стари пораки</string>
+  <!-- Removed by excludeNonTranslatables <string name="preferences__delete_old_messages">Избришете стари пораки</string> -->
   <string name="preferences__conversation_length_limit">Максимална должина на разговор</string>
   <string name="preferences__light_theme">Светла</string>
   <string name="preferences__dark_theme">Темна</string>
@@ -482,7 +482,7 @@
   <string name="preferences__submit_debug_log">Испратете протокол за дијагноза</string>
   <string name="preferences__support_wifi_calling">\'WiFi Calling\' мод за компатибилност</string>
   <string name="preferences__enable_if_your_device_supports_sms_mms_delivery_over_wifi">Овозможи доколку уредот користи SMS/MMS достава преку WiFi (овозможи само доколку \'WiFi Calling\' е овозможен на уредот)</string>
-  <string name="preferences_app_protection__blocked_contacts">Блокирани контакти</string>
+  <!-- Removed by excludeNonTranslatables <string name="preferences_app_protection__blocked_contacts">Блокирани контакти</string> -->
   <string name="preferences_notifications__ringtone">Звук за звонење</string>
   <!--****************************************-->
   <!--menus-->
@@ -538,7 +538,7 @@
   <string name="text_secure_normal__help">Помош</string>
   <!--verify_display_fragment-->
   <!--reminder_header-->
-  <string name="reminder_header_outdated_build">Вашата верзија на Signal е застарена.</string>
+  <!-- Removed by excludeNonTranslatables <string name="reminder_header_outdated_build">Вашата верзија на Signal е застарена.</string> -->
   <string name="reminder_header_sms_default_title">Користи како стандардна СМС апликација</string>
   <string name="reminder_header_share_title">Покани ги твиоте пријатели!</string>
   <!--media_preview-->

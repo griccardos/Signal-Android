@@ -17,7 +17,6 @@ import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.profiles.ProfileName;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.ProfileUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.whispersystems.libsignal.util.guava.Optional;
@@ -43,7 +42,7 @@ public class RefreshOwnProfileJob extends BaseJob {
   public RefreshOwnProfileJob() {
     this(new Parameters.Builder()
                        .addConstraint(NetworkConstraint.KEY)
-                       .setQueue("RefreshOwnProfileJob")
+                       .setQueue(ProfileUploadJob.QUEUE)
                        .setMaxInstances(1)
                        .setMaxAttempts(10)
                        .build());
@@ -72,7 +71,7 @@ public class RefreshOwnProfileJob extends BaseJob {
     }
 
     Recipient            self                 = Recipient.self();
-    ProfileAndCredential profileAndCredential = ProfileUtil.retrieveProfile(context, self, getRequestType(self));
+    ProfileAndCredential profileAndCredential = ProfileUtil.retrieveProfileSync(context, self, getRequestType(self));
     SignalServiceProfile profile              = profileAndCredential.getProfile();
 
     setProfileName(profile.getName());
@@ -93,7 +92,7 @@ public class RefreshOwnProfileJob extends BaseJob {
   }
 
   private static SignalServiceProfile.RequestType getRequestType(@NonNull Recipient recipient) {
-    return FeatureFlags.VERSIONED_PROFILES && !recipient.hasProfileKeyCredential()
+    return !recipient.hasProfileKeyCredential()
            ? SignalServiceProfile.RequestType.PROFILE_AND_CREDENTIAL
            : SignalServiceProfile.RequestType.PROFILE;
   }

@@ -34,6 +34,7 @@ import org.whispersystems.signalservice.api.messages.SignalServiceGroupV2;
 import org.whispersystems.signalservice.api.messages.SignalServiceReceiptMessage;
 import org.whispersystems.signalservice.api.messages.SignalServiceTypingMessage;
 import org.whispersystems.signalservice.api.messages.calls.AnswerMessage;
+import org.whispersystems.signalservice.api.messages.calls.CallingResponse;
 import org.whispersystems.signalservice.api.messages.calls.IceUpdateMessage;
 import org.whispersystems.signalservice.api.messages.calls.OfferMessage;
 import org.whispersystems.signalservice.api.messages.calls.SignalServiceCallMessage;
@@ -80,6 +81,7 @@ import org.whispersystems.signalservice.internal.push.StaleDevices;
 import org.whispersystems.signalservice.internal.push.exceptions.MismatchedDevicesException;
 import org.whispersystems.signalservice.internal.push.exceptions.StaleDevicesException;
 import org.whispersystems.signalservice.internal.push.http.AttachmentCipherOutputStreamFactory;
+import org.whispersystems.signalservice.internal.push.http.CancelationSignal;
 import org.whispersystems.signalservice.internal.push.http.ResumableUploadSpec;
 import org.whispersystems.signalservice.internal.util.StaticCredentialsProvider;
 import org.whispersystems.signalservice.internal.util.Util;
@@ -88,11 +90,18 @@ import org.whispersystems.util.Base64;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -105,6 +114,8 @@ public class SignalServiceMessageSender {
 
   private static final String TAG = SignalServiceMessageSender.class.getSimpleName();
 
+  private static final int RETRY_COUNT = 4;
+
   private final PushServiceSocket                                   socket;
   private final SignalProtocolStore                                 store;
   private final SignalServiceAddress                                localAddress;
@@ -113,7 +124,9 @@ public class SignalServiceMessageSender {
   private final AtomicReference<Optional<SignalServiceMessagePipe>> pipe;
   private final AtomicReference<Optional<SignalServiceMessagePipe>> unidentifiedPipe;
   private final AtomicBoolean                                       isMultiDevice;
-  private final AtomicBoolean                                       attachmentsV3;
+
+  private final ExecutorService                                     executor;
+  private final int                                                 maxEnvelopeSize;
 
   /**
    * Construct a SignalServiceMessageSender.
@@ -131,13 +144,13 @@ public class SignalServiceMessageSender {
                                     SignalProtocolStore store,
                                     String signalAgent,
                                     boolean isMultiDevice,
-                                    boolean attachmentsV3,
                                     Optional<SignalServiceMessagePipe> pipe,
                                     Optional<SignalServiceMessagePipe> unidentifiedPipe,
                                     Optional<EventListener> eventListener,
-                                    ClientZkProfileOperations clientZkProfileOperations)
+                                    ClientZkProfileOperations clientZkProfileOperations,
+                                    ExecutorService executor)
   {
-    this(urls, new StaticCredentialsProvider(uuid, e164, password, null), store, signalAgent, isMultiDevice, attachmentsV3, pipe, unidentifiedPipe, eventListener, clientZkProfileOperations);
+    this(urls, new StaticCredentialsProvider(uuid, e164, password, null), store, signalAgent, isMultiDevice, pipe, unidentifiedPipe, eventListener, clientZkProfileOperations, executor, 0);
   }
 
   public SignalServiceMessageSender(SignalServiceConfiguration urls,
@@ -145,11 +158,12 @@ public class SignalServiceMessageSender {
                                     SignalProtocolStore store,
                                     String signalAgent,
                                     boolean isMultiDevice,
-                                    boolean attachmentsV3,
                                     Optional<SignalServiceMessagePipe> pipe,
                                     Optional<SignalServiceMessagePipe> unidentifiedPipe,
                                     Optional<EventListener> eventListener,
-                                    ClientZkProfileOperations clientZkProfileOperations)
+                                    ClientZkProfileOperations clientZkProfileOperations,
+                                    ExecutorService executor,
+                                    int maxEnvelopeSize)
   {
     this.socket           = new PushServiceSocket(urls, credentialsProvider, signalAgent, clientZkProfileOperations);
     this.store            = store;
@@ -157,8 +171,9 @@ public class SignalServiceMessageSender {
     this.pipe             = new AtomicReference<>(pipe);
     this.unidentifiedPipe = new AtomicReference<>(unidentifiedPipe);
     this.isMultiDevice    = new AtomicBoolean(isMultiDevice);
-    this.attachmentsV3    = new AtomicBoolean(attachmentsV3);
     this.eventListener    = eventListener;
+    this.executor         = executor != null ? executor : Executors.newSingleThreadExecutor();
+    this.maxEnvelopeSize  = maxEnvelopeSize;
   }
 
   /**
@@ -176,7 +191,7 @@ public class SignalServiceMessageSender {
   {
     byte[] content = createReceiptContent(message);
 
-    sendMessage(recipient, getTargetUnidentifiedAccess(unidentifiedAccess), message.getWhen(), content, false);
+    sendMessage(recipient, getTargetUnidentifiedAccess(unidentifiedAccess), message.getWhen(), content, false, null);
   }
 
   /**
@@ -194,16 +209,17 @@ public class SignalServiceMessageSender {
   {
     byte[] content = createTypingContent(message);
 
-    sendMessage(recipient, getTargetUnidentifiedAccess(unidentifiedAccess), message.getTimestamp(), content, true);
+    sendMessage(recipient, getTargetUnidentifiedAccess(unidentifiedAccess), message.getTimestamp(), content, true, null);
   }
 
   public void sendTyping(List<SignalServiceAddress>             recipients,
                          List<Optional<UnidentifiedAccessPair>> unidentifiedAccess,
-                         SignalServiceTypingMessage             message)
+                         SignalServiceTypingMessage             message,
+                         CancelationSignal                      cancelationSignal)
       throws IOException
   {
     byte[] content = createTypingContent(message);
-    sendMessage(recipients, getTargetUnidentifiedAccess(unidentifiedAccess), message.getTimestamp(), content, true);
+    sendMessage(recipients, getTargetUnidentifiedAccess(unidentifiedAccess), message.getTimestamp(), content, true, cancelationSignal);
   }
 
 
@@ -220,7 +236,21 @@ public class SignalServiceMessageSender {
       throws IOException, UntrustedIdentityException
   {
     byte[] content = createCallContent(message);
-    sendMessage(recipient, getTargetUnidentifiedAccess(unidentifiedAccess), System.currentTimeMillis(), content, false);
+    sendMessage(recipient, getTargetUnidentifiedAccess(unidentifiedAccess), System.currentTimeMillis(), content, false, null);
+  }
+
+  /**
+   * Send an http request on behalf of the calling infrastructure.
+   *
+   * @param requestId Request identifier
+   * @param url Fully qualified URL to request
+   * @param httpMethod Http method to use (e.g., "GET", "POST")
+   * @param headers Optional list of headers to send with request
+   * @param body Optional body to send with request
+   * @return
+   */
+  public CallingResponse makeCallingRequest(long requestId, String url, String httpMethod, List<Pair<String, String>> headers, byte[] body) {
+    return socket.makeCallingRequest(requestId, url, httpMethod, headers, body);
   }
 
   /**
@@ -238,11 +268,11 @@ public class SignalServiceMessageSender {
   {
     byte[]            content   = createMessageContent(message);
     long              timestamp = message.getTimestamp();
-    SendMessageResult result    = sendMessage(recipient, getTargetUnidentifiedAccess(unidentifiedAccess), timestamp, content, false);
+    SendMessageResult result    = sendMessage(recipient, getTargetUnidentifiedAccess(unidentifiedAccess), timestamp, content, false, null);
 
     if (result.getSuccess() != null && result.getSuccess().isNeedsSync()) {
       byte[] syncMessage = createMultiDeviceSentTranscriptContent(content, Optional.of(recipient), timestamp, Collections.singletonList(result), false);
-      sendMessage(localAddress, Optional.<UnidentifiedAccess>absent(), timestamp, syncMessage, false);
+      sendMessage(localAddress, Optional.<UnidentifiedAccess>absent(), timestamp, syncMessage, false, null);
     }
 
     if (message.isEndSession()) {
@@ -276,7 +306,7 @@ public class SignalServiceMessageSender {
   {
     byte[]                  content            = createMessageContent(message);
     long                    timestamp          = message.getTimestamp();
-    List<SendMessageResult> results            = sendMessage(recipients, getTargetUnidentifiedAccess(unidentifiedAccess), timestamp, content, false);
+    List<SendMessageResult> results            = sendMessage(recipients, getTargetUnidentifiedAccess(unidentifiedAccess), timestamp, content, false, null);
     boolean                 needsSyncInResults = false;
 
     for (SendMessageResult result : results) {
@@ -287,8 +317,13 @@ public class SignalServiceMessageSender {
     }
 
     if (needsSyncInResults || isMultiDevice.get()) {
-      byte[] syncMessage = createMultiDeviceSentTranscriptContent(content, Optional.<SignalServiceAddress>absent(), timestamp, results, isRecipientUpdate);
-      sendMessage(localAddress, Optional.<UnidentifiedAccess>absent(), timestamp, syncMessage, false);
+      Optional<SignalServiceAddress> recipient = Optional.absent();
+      if (!message.getGroupContext().isPresent() && recipients.size() == 1) {
+        recipient = Optional.of(recipients.get(0));
+      }
+
+      byte[] syncMessage = createMultiDeviceSentTranscriptContent(content, recipient, timestamp, results, isRecipientUpdate);
+      sendMessage(localAddress, Optional.<UnidentifiedAccess>absent(), timestamp, syncMessage, false, null);
     }
 
     return results;
@@ -332,7 +367,7 @@ public class SignalServiceMessageSender {
     long timestamp = message.getSent().isPresent() ? message.getSent().get().getTimestamp()
                                                    : System.currentTimeMillis();
 
-    sendMessage(localAddress, Optional.<UnidentifiedAccess>absent(), timestamp, content, false);
+    sendMessage(localAddress, Optional.<UnidentifiedAccess>absent(), timestamp, content, false, null);
   }
 
   public void setSoTimeoutMillis(long soTimeoutMillis) {
@@ -343,11 +378,10 @@ public class SignalServiceMessageSender {
     socket.cancelInFlightRequests();
   }
 
-  public void update(SignalServiceMessagePipe pipe, SignalServiceMessagePipe unidentifiedPipe, boolean isMultiDevice, boolean attachmentsV3) {
+  public void update(SignalServiceMessagePipe pipe, SignalServiceMessagePipe unidentifiedPipe, boolean isMultiDevice) {
     this.pipe.set(Optional.fromNullable(pipe));
     this.unidentifiedPipe.set(Optional.fromNullable(unidentifiedPipe));
     this.isMultiDevice.set(isMultiDevice);
-    this.attachmentsV3.set(attachmentsV3);
   }
 
   public SignalServiceAttachmentPointer uploadAttachment(SignalServiceAttachmentStream attachment) throws IOException {
@@ -364,7 +398,7 @@ public class SignalServiceMessageSender {
                                                                  attachment.getCancelationSignal(),
                                                                  attachment.getResumableUploadSpec().orNull());
 
-    if (attachmentsV3.get()) {
+    if (attachment.getResumableUploadSpec().isPresent()) {
       return uploadAttachmentV3(attachment, attachmentKey, attachmentData);
     } else {
       return uploadAttachmentV2(attachment, attachmentKey, attachmentData);
@@ -401,6 +435,7 @@ public class SignalServiceMessageSender {
                                               Optional.of(attachmentIdAndDigest.second()),
                                               attachment.getFileName(),
                                               attachment.getVoiceNote(),
+                                              attachment.isBorderless(),
                                               attachment.getCaption(),
                                               attachment.getBlurHash(),
                                               attachment.getUploadTimestamp());
@@ -440,6 +475,7 @@ public class SignalServiceMessageSender {
                                               Optional.of(digest),
                                               attachment.getFileName(),
                                               attachment.getVoiceNote(),
+                                              attachment.isBorderless(),
                                               attachment.getCaption(),
                                               attachment.getBlurHash(),
                                               attachment.getUploadTimestamp());
@@ -463,11 +499,11 @@ public class SignalServiceMessageSender {
                                      .build()
                                      .toByteArray();
 
-    SendMessageResult result = sendMessage(message.getDestination(), getTargetUnidentifiedAccess(unidentifiedAccess), message.getTimestamp(), content, false);
+    SendMessageResult result = sendMessage(message.getDestination(), getTargetUnidentifiedAccess(unidentifiedAccess), message.getTimestamp(), content, false, null);
 
     if (result.getSuccess().isNeedsSync()) {
       byte[] syncMessage = createMultiDeviceVerifiedContent(message, nullMessage.toByteArray());
-      sendMessage(localAddress, Optional.<UnidentifiedAccess>absent(), message.getTimestamp(), syncMessage, false);
+      sendMessage(localAddress, Optional.<UnidentifiedAccess>absent(), message.getTimestamp(), syncMessage, false, null);
     }
   }
 
@@ -559,11 +595,23 @@ public class SignalServiceMessageSender {
                                                                 .setText(message.getQuote().get().getText());
 
       if (message.getQuote().get().getAuthor().getUuid().isPresent()) {
-        quoteBuilder = quoteBuilder.setAuthorUuid(message.getQuote().get().getAuthor().getUuid().get().toString());
+        quoteBuilder.setAuthorUuid(message.getQuote().get().getAuthor().getUuid().get().toString());
       }
 
+      // TODO [Alan] PhoneNumberPrivacy: Do not set this number
       if (message.getQuote().get().getAuthor().getNumber().isPresent()) {
-        quoteBuilder = quoteBuilder.setAuthorE164(message.getQuote().get().getAuthor().getNumber().get());
+        quoteBuilder.setAuthorE164(message.getQuote().get().getAuthor().getNumber().get());
+      }
+
+      if (!message.getQuote().get().getMentions().isEmpty()) {
+        for (SignalServiceDataMessage.Mention mention : message.getQuote().get().getMentions()) {
+          quoteBuilder.addBodyRanges(DataMessage.BodyRange.newBuilder()
+                                                          .setStart(mention.getStart())
+                                                          .setLength(mention.getLength())
+                                                          .setMentionUuid(mention.getUuid().toString()));
+        }
+        
+        builder.setRequiredProtocolVersion(Math.max(DataMessage.ProtocolVersion.MENTIONS_VALUE, builder.getRequiredProtocolVersion()));
       }
 
       for (SignalServiceDataMessage.Quote.QuotedAttachment attachment : message.getQuote().get().getAttachments()) {
@@ -593,6 +641,8 @@ public class SignalServiceMessageSender {
       for (SignalServiceDataMessage.Preview preview : message.getPreviews().get()) {
         DataMessage.Preview.Builder previewBuilder = DataMessage.Preview.newBuilder();
         previewBuilder.setTitle(preview.getTitle());
+        previewBuilder.setDescription(preview.getDescription());
+        previewBuilder.setDate(preview.getDate());
         previewBuilder.setUrl(preview.getUrl());
 
         if (preview.getImage().isPresent()) {
@@ -607,12 +657,26 @@ public class SignalServiceMessageSender {
       }
     }
 
+    if (message.getMentions().isPresent()) {
+      for (SignalServiceDataMessage.Mention mention : message.getMentions().get()) {
+        builder.addBodyRanges(DataMessage.BodyRange.newBuilder()
+                                                   .setStart(mention.getStart())
+                                                   .setLength(mention.getLength())
+                                                   .setMentionUuid(mention.getUuid().toString()));
+      }
+      builder.setRequiredProtocolVersion(Math.max(DataMessage.ProtocolVersion.MENTIONS_VALUE, builder.getRequiredProtocolVersion()));
+    }
+
     if (message.getSticker().isPresent()) {
       DataMessage.Sticker.Builder stickerBuilder = DataMessage.Sticker.newBuilder();
 
       stickerBuilder.setPackId(ByteString.copyFrom(message.getSticker().get().getPackId()));
       stickerBuilder.setPackKey(ByteString.copyFrom(message.getSticker().get().getPackKey()));
       stickerBuilder.setStickerId(message.getSticker().get().getStickerId());
+
+      if (message.getSticker().get().getEmoji() != null) {
+        stickerBuilder.setEmoji(message.getSticker().get().getEmoji());
+      }
 
       if (message.getSticker().get().getAttachment().isStream()) {
         stickerBuilder.setData(createAttachmentPointer(message.getSticker().get().getAttachment().asStream()));
@@ -634,10 +698,6 @@ public class SignalServiceMessageSender {
                                                                          .setRemove(message.getReaction().get().isRemove())
                                                                          .setTargetSentTimestamp(message.getReaction().get().getTargetSentTimestamp());
 
-      if (message.getReaction().get().getTargetAuthor().getNumber().isPresent()) {
-        reactionBuilder.setTargetAuthorE164(message.getReaction().get().getTargetAuthor().getNumber().get());
-      }
-
       if (message.getReaction().get().getTargetAuthor().getUuid().isPresent()) {
         reactionBuilder.setTargetAuthorUuid(message.getReaction().get().getTargetAuthor().getUuid().get().toString());
       }
@@ -655,7 +715,7 @@ public class SignalServiceMessageSender {
 
     builder.setTimestamp(message.getTimestamp());
 
-    return container.setDataMessage(builder).build().toByteArray();
+    return enforceMaxContentSize(container.setDataMessage(builder).build().toByteArray());
   }
 
   private byte[] createCallContent(SignalServiceCallMessage callMessage) {
@@ -664,24 +724,51 @@ public class SignalServiceMessageSender {
 
     if (callMessage.getOfferMessage().isPresent()) {
       OfferMessage offer = callMessage.getOfferMessage().get();
-      builder.setOffer(CallMessage.Offer.newBuilder()
-                                        .setId(offer.getId())
-                                        .setDescription(offer.getDescription())
-                                        .setType(offer.getType().getProtoType()));
+      CallMessage.Offer.Builder offerBuilder = CallMessage.Offer.newBuilder()
+                                                                .setId(offer.getId())
+                                                                .setType(offer.getType().getProtoType());
+
+      if (offer.getOpaque() != null) {
+        offerBuilder.setOpaque(ByteString.copyFrom(offer.getOpaque()));
+      }
+
+      if (offer.getSdp() != null) {
+        offerBuilder.setSdp(offer.getSdp());
+      }
+
+      builder.setOffer(offerBuilder);
     } else if (callMessage.getAnswerMessage().isPresent()) {
       AnswerMessage answer = callMessage.getAnswerMessage().get();
-      builder.setAnswer(CallMessage.Answer.newBuilder()
-                                          .setId(answer.getId())
-                                          .setDescription(answer.getDescription()));
+      CallMessage.Answer.Builder answerBuilder = CallMessage.Answer.newBuilder()
+                                                                   .setId(answer.getId());
+
+      if (answer.getOpaque() != null) {
+        answerBuilder.setOpaque(ByteString.copyFrom(answer.getOpaque()));
+      }
+
+      if (answer.getSdp() != null) {
+        answerBuilder.setSdp(answer.getSdp());
+      }
+
+      builder.setAnswer(answerBuilder);
     } else if (callMessage.getIceUpdateMessages().isPresent()) {
       List<IceUpdateMessage> updates = callMessage.getIceUpdateMessages().get();
 
       for (IceUpdateMessage update : updates) {
-        builder.addIceUpdate(CallMessage.IceUpdate.newBuilder()
-                                                  .setId(update.getId())
-                                                  .setSdp(update.getSdp())
-                                                  .setSdpMid(update.getSdpMid())
-                                                  .setSdpMLineIndex(update.getSdpMLineIndex()));
+        CallMessage.IceUpdate.Builder iceBuilder = CallMessage.IceUpdate.newBuilder()
+                                                                        .setId(update.getId())
+                                                                        .setMid("audio")
+                                                                        .setLine(0);
+
+        if (update.getOpaque() != null) {
+          iceBuilder.setOpaque(ByteString.copyFrom(update.getOpaque()));
+        }
+
+        if (update.getSdp() != null) {
+          iceBuilder.setSdp(update.getSdp());
+        }
+
+        builder.addIceUpdate(iceBuilder);
       }
     } else if (callMessage.getHangupMessage().isPresent()) {
       CallMessage.Hangup.Type    protoType        = callMessage.getHangupMessage().get().getType().getProtoType();
@@ -700,6 +787,8 @@ public class SignalServiceMessageSender {
       }
     } else if (callMessage.getBusyMessage().isPresent()) {
       builder.setBusy(CallMessage.Busy.newBuilder().setId(callMessage.getBusyMessage().get().getId()));
+    } else if (callMessage.getOpaqueMessage().isPresent()) {
+      builder.setOpaque(CallMessage.Opaque.newBuilder().setData(ByteString.copyFrom(callMessage.getOpaqueMessage().get().getOpaque())));
     }
 
     builder.setMultiRing(callMessage.isMultiRing());
@@ -733,7 +822,7 @@ public class SignalServiceMessageSender {
 
   private byte[] createMultiDeviceSentTranscriptContent(SentTranscriptMessage transcript, Optional<UnidentifiedAccessPair> unidentifiedAccess) throws IOException {
     SignalServiceAddress address = transcript.getDestination().get();
-    SendMessageResult    result  = SendMessageResult.success(address, unidentifiedAccess.isPresent(), true);
+    SendMessageResult    result  = SendMessageResult.success(address, unidentifiedAccess.isPresent(), true, -1);
 
     return createMultiDeviceSentTranscriptContent(createMessageContent(transcript.getMessage()),
                                                   Optional.of(address),
@@ -1041,19 +1130,12 @@ public class SignalServiceMessageSender {
         for (SignalServiceAddress address : group.getMembers().get()) {
           if (address.getNumber().isPresent()) {
             builder.addMembersE164(address.getNumber().get());
-          }
 
-          GroupContext.Member.Builder memberBuilder = GroupContext.Member.newBuilder();
-
-          if (address.getUuid().isPresent()) {
-            memberBuilder.setUuid(address.getUuid().get().toString());
-          }
-
-          if (address.getNumber().isPresent()) {
+            GroupContext.Member.Builder memberBuilder = GroupContext.Member.newBuilder();
             memberBuilder.setE164(address.getNumber().get());
-          }
 
-          builder.addMembers(memberBuilder.build());
+            builder.addMembers(memberBuilder.build());
+          }
         }
       }
 
@@ -1072,10 +1154,17 @@ public class SignalServiceMessageSender {
   }
 
   private static GroupContextV2 createGroupContent(SignalServiceGroupV2 group) {
-    return GroupContextV2.newBuilder()
-                         .setMasterKey(ByteString.copyFrom(group.getMasterKey().serialize()))
-                         .setRevision(group.getRevision())
-                         .build();
+    GroupContextV2.Builder builder = GroupContextV2.newBuilder()
+                                                   .setMasterKey(ByteString.copyFrom(group.getMasterKey().serialize()))
+                                                   .setRevision(group.getRevision());
+
+
+    byte[] signedGroupChange = group.getSignedGroupChange();
+    if (signedGroupChange != null && signedGroupChange.length <= 2048) {
+      builder.setGroupChange(ByteString.copyFrom(signedGroupChange));
+    }
+
+    return builder.build();
   }
 
   private List<DataMessage.Contact> createSharedContactContent(List<SharedContact> contacts) throws IOException {
@@ -1178,31 +1267,65 @@ public class SignalServiceMessageSender {
                                               List<Optional<UnidentifiedAccess>> unidentifiedAccess,
                                               long                               timestamp,
                                               byte[]                             content,
-                                              boolean                            online)
+                                              boolean                            online,
+                                              CancelationSignal                  cancelationSignal)
       throws IOException
   {
-    List<SendMessageResult>                results                    = new LinkedList<>();
+    enforceMaxContentSize(content);
+
+    long                                   startTime                  = System.currentTimeMillis();
+    List<Future<SendMessageResult>>        futureResults              = new LinkedList<>();
     Iterator<SignalServiceAddress>         recipientIterator          = recipients.iterator();
     Iterator<Optional<UnidentifiedAccess>> unidentifiedAccessIterator = unidentifiedAccess.iterator();
 
     while (recipientIterator.hasNext()) {
-      SignalServiceAddress recipient = recipientIterator.next();
+      SignalServiceAddress         recipient = recipientIterator.next();
+      Optional<UnidentifiedAccess> access    = unidentifiedAccessIterator.next();
+      futureResults.add(executor.submit(() -> sendMessage(recipient, access, timestamp, content, online, cancelationSignal)));
+    }
 
+    List<SendMessageResult> results = new ArrayList<>(futureResults.size());
+    recipientIterator = recipients.iterator();
+
+    for (Future<SendMessageResult> futureResult : futureResults) {
+      SignalServiceAddress recipient = recipientIterator.next();
       try {
-        SendMessageResult result = sendMessage(recipient, unidentifiedAccessIterator.next(), timestamp, content, online);
-        results.add(result);
-      } catch (UntrustedIdentityException e) {
-        Log.w(TAG, e);
-        results.add(SendMessageResult.identityFailure(recipient, e.getIdentityKey()));
-      } catch (UnregisteredUserException e) {
-        Log.w(TAG, e);
-        results.add(SendMessageResult.unregisteredFailure(recipient));
-      } catch (PushNetworkException e) {
-        Log.w(TAG, e);
-        results.add(SendMessageResult.networkFailure(recipient));
+        results.add(futureResult.get());
+      } catch (ExecutionException e) {
+        if (e.getCause() instanceof UntrustedIdentityException) {
+          Log.w(TAG, e);
+          results.add(SendMessageResult.identityFailure(recipient, ((UntrustedIdentityException) e.getCause()).getIdentityKey()));
+        } else if (e.getCause() instanceof UnregisteredUserException) {
+          Log.w(TAG, "Found unregistered user.");
+          results.add(SendMessageResult.unregisteredFailure(recipient));
+        } else if (e.getCause() instanceof PushNetworkException) {
+          Log.w(TAG, e);
+          results.add(SendMessageResult.networkFailure(recipient));
+        } else {
+          throw new IOException(e);
+        }
+      } catch (InterruptedException e) {
+        throw new IOException(e);
       }
     }
 
+    double sendsForAverage = 0;
+    for (SendMessageResult result : results) {
+      if (result.getSuccess() != null && result.getSuccess().getDuration() != -1) {
+        sendsForAverage++;
+      }
+    }
+
+    double average = 0;
+    if (sendsForAverage > 0) {
+      for (SendMessageResult result : results) {
+        if (result.getSuccess() != null && result.getSuccess().getDuration() != -1) {
+          average += result.getSuccess().getDuration() / sendsForAverage;
+        }
+      }
+    }
+
+    Log.d(TAG, "Completed send to " + recipients.size() + " recipients in " + (System.currentTimeMillis() - startTime) + " ms, with an average time of " + Math.round(average) + " ms per send.");
     return results;
   }
 
@@ -1210,38 +1333,54 @@ public class SignalServiceMessageSender {
                                         Optional<UnidentifiedAccess> unidentifiedAccess,
                                         long                         timestamp,
                                         byte[]                       content,
-                                        boolean                      online)
+                                        boolean                      online,
+                                        CancelationSignal            cancelationSignal)
       throws UntrustedIdentityException, IOException
   {
-    for (int i=0;i<4;i++) {
+    enforceMaxContentSize(content);
+
+    long startTime = System.currentTimeMillis();
+
+    for (int i = 0; i < RETRY_COUNT; i++) {
+      if (cancelationSignal != null && cancelationSignal.isCanceled()) {
+        throw new CancelationException();
+      }
+
       try {
-        OutgoingPushMessageList            messages         = getEncryptedMessages(socket, recipient, unidentifiedAccess, timestamp, content, online);
+        OutgoingPushMessageList messages = getEncryptedMessages(socket, recipient, unidentifiedAccess, timestamp, content, online);
+
+        if (cancelationSignal != null && cancelationSignal.isCanceled()) {
+          throw new CancelationException();
+        }
+
         Optional<SignalServiceMessagePipe> pipe             = this.pipe.get();
         Optional<SignalServiceMessagePipe> unidentifiedPipe = this.unidentifiedPipe.get();
 
         if (pipe.isPresent() && !unidentifiedAccess.isPresent()) {
           try {
-            Log.w(TAG, "Transmitting over pipe...");
-            SendMessageResponse response = pipe.get().send(messages, Optional.<UnidentifiedAccess>absent());
-            return SendMessageResult.success(recipient, false, response.getNeedsSync() || isMultiDevice.get());
-          } catch (IOException e) {
+            SendMessageResponse response = pipe.get().send(messages, Optional.absent()).get(10, TimeUnit.SECONDS);
+            return SendMessageResult.success(recipient, false, response.getNeedsSync() || isMultiDevice.get(), System.currentTimeMillis() - startTime);
+          } catch (IOException | ExecutionException | InterruptedException | TimeoutException e) {
             Log.w(TAG, e);
-            Log.w(TAG, "Falling back to new connection...");
+            Log.w(TAG, "[sendMessage] Pipe failed, falling back...");
           }
         } else if (unidentifiedPipe.isPresent() && unidentifiedAccess.isPresent()) {
           try {
-            Log.w(TAG, "Transmitting over unidentified pipe...");
-            SendMessageResponse response = unidentifiedPipe.get().send(messages, unidentifiedAccess);
-            return SendMessageResult.success(recipient, true, response.getNeedsSync() || isMultiDevice.get());
-          } catch (IOException e) {
+            SendMessageResponse response = unidentifiedPipe.get().send(messages, unidentifiedAccess).get(10, TimeUnit.SECONDS);
+            return SendMessageResult.success(recipient, true, response.getNeedsSync() || isMultiDevice.get(), System.currentTimeMillis() - startTime);
+          } catch (IOException | ExecutionException | InterruptedException | TimeoutException e) {
             Log.w(TAG, e);
-            Log.w(TAG, "Falling back to new connection...");
+            Log.w(TAG, "[sendMessage] Unidentified pipe failed, falling back...");
           }
         }
 
-        Log.w(TAG, "Not transmitting over pipe...");
+        if (cancelationSignal != null && cancelationSignal.isCanceled()) {
+          throw new CancelationException();
+        }
+
         SendMessageResponse response = socket.sendMessage(messages, unidentifiedAccess);
-        return SendMessageResult.success(recipient, unidentifiedAccess.isPresent(), response.getNeedsSync() || isMultiDevice.get());
+
+        return SendMessageResult.success(recipient, unidentifiedAccess.isPresent(), response.getNeedsSync() || isMultiDevice.get(), System.currentTimeMillis() - startTime);
 
       } catch (InvalidKeyException ike) {
         Log.w(TAG, ike);
@@ -1275,10 +1414,10 @@ public class SignalServiceMessageSender {
 
     for (SignalServiceAttachment attachment : attachments.get()) {
       if (attachment.isStream()) {
-        Log.w(TAG, "Found attachment, creating pointer...");
+        Log.i(TAG, "Found attachment, creating pointer...");
         pointers.add(createAttachmentPointer(attachment.asStream()));
       } else if (attachment.isPointer()) {
-        Log.w(TAG, "Including existing attachment pointer...");
+        Log.i(TAG, "Including existing attachment pointer...");
         pointers.add(createAttachmentPointer(attachment.asPointer()));
       }
     }
@@ -1321,6 +1460,10 @@ public class SignalServiceMessageSender {
 
     if (attachment.getVoiceNote()) {
       builder.setFlags(AttachmentPointer.Flags.VOICE_MESSAGE_VALUE);
+    }
+
+    if (attachment.isBorderless()) {
+      builder.setFlags(AttachmentPointer.Flags.BORDERLESS_VALUE);
     }
 
     if (attachment.getCaption().isPresent()) {
@@ -1460,6 +1603,13 @@ public class SignalServiceMessageSender {
     }
 
     return results;
+  }
+
+  private byte[] enforceMaxContentSize(byte[] content) {
+    if (maxEnvelopeSize > 0 && content.length > maxEnvelopeSize) {
+      throw new ContentTooLargeException(content.length);
+    }
+    return content;
   }
 
   public static interface EventListener {

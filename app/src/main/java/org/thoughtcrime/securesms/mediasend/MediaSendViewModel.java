@@ -17,6 +17,7 @@ import com.annimon.stream.Stream;
 
 import org.thoughtcrime.securesms.TransportOption;
 import org.thoughtcrime.securesms.database.ThreadDatabase;
+import org.thoughtcrime.securesms.database.model.Mention;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.MediaConstraints;
 import org.thoughtcrime.securesms.mms.OutgoingMediaMessage;
@@ -147,7 +148,11 @@ class MediaSendViewModel extends ViewModel {
         List<Media> filteredMedia = getFilteredMedia(context, populatedMedia, mediaConstraints);
 
         if (filteredMedia.size() != newMedia.size()) {
-          error.setValue(Error.ITEM_TOO_LARGE);
+          if (filteredMedia.isEmpty() && newMedia.size() == 1 && page == Page.UNKNOWN) {
+            error.setValue(Error.ONLY_ITEM_TOO_LARGE);
+          } else {
+            error.setValue(Error.ITEM_TOO_LARGE);
+          }
         }
 
         if (filteredMedia.size() > maxSelection) {
@@ -299,7 +304,7 @@ class MediaSendViewModel extends ViewModel {
     captionVisible = false;
 
     List<Media> uncaptioned = Stream.of(getSelectedMediaOrDefault())
-                                    .map(m -> new Media(m.getUri(), m.getMimeType(), m.getDate(), m.getWidth(), m.getHeight(), m.getSize(), m.getDuration(), m.getBucketId(), Optional.absent(), Optional.absent()))
+                                    .map(m -> new Media(m.getUri(), m.getMimeType(), m.getDate(), m.getWidth(), m.getHeight(), m.getSize(), m.getDuration(), m.isBorderless(), m.getBucketId(), Optional.absent(), Optional.absent()))
                                     .toList();
 
     selectedMedia.setValue(uncaptioned);
@@ -402,7 +407,7 @@ class MediaSendViewModel extends ViewModel {
   }
 
   void onVideoBeginEdit(@NonNull Uri uri) {
-    cancelUpload(new Media(uri, "", 0, 0, 0, 0, 0, Optional.absent(), Optional.absent(), Optional.absent()));
+    cancelUpload(new Media(uri, "", 0, 0, 0, 0, 0, false, Optional.absent(), Optional.absent(), Optional.absent()));
   }
 
   void onMediaCaptured(@NonNull Media media) {
@@ -449,15 +454,16 @@ class MediaSendViewModel extends ViewModel {
     savedDrawState.putAll(state);
   }
 
-  @NonNull LiveData<MediaSendActivityResult> onSendClicked(Map<Media, MediaTransform> modelsToTransform, @NonNull List<Recipient> recipients) {
+  @NonNull LiveData<MediaSendActivityResult> onSendClicked(Map<Media, MediaTransform> modelsToTransform, @NonNull List<Recipient> recipients, @NonNull List<Mention> mentions) {
     if (isSms && recipients.size() > 0) {
       throw new IllegalStateException("Provided recipients to send to, but this is SMS!");
     }
 
-    MutableLiveData<MediaSendActivityResult> result         = new MutableLiveData<>();
-    Runnable                                 dialogRunnable = () -> event.postValue(Event.SHOW_RENDER_PROGRESS);
-    String                                   trimmedBody    = isViewOnce() ? "" : body.toString().trim();
-    List<Media>                              initialMedia   = getSelectedMediaOrDefault();
+    MutableLiveData<MediaSendActivityResult> result          = new MutableLiveData<>();
+    Runnable                                 dialogRunnable  = () -> event.postValue(Event.SHOW_RENDER_PROGRESS);
+    String                                   trimmedBody     = isViewOnce() ? "" : body.toString().trim();
+    List<Media>                              initialMedia    = getSelectedMediaOrDefault();
+    List<Mention>                            trimmedMentions = isViewOnce() ? Collections.emptyList() : mentions;
 
     Preconditions.checkState(initialMedia.size() > 0, "No media to send!");
 
@@ -472,7 +478,7 @@ class MediaSendViewModel extends ViewModel {
 
       if (isSms || MessageSender.isLocalSelfSend(application, recipient, isSms)) {
         Log.i(TAG, "SMS or local self-send. Skipping pre-upload.");
-        result.postValue(MediaSendActivityResult.forTraditionalSend(updatedMedia, trimmedBody, transport, isViewOnce()));
+        result.postValue(MediaSendActivityResult.forTraditionalSend(updatedMedia, trimmedBody, transport, isViewOnce(), trimmedMentions));
         return;
       }
 
@@ -481,7 +487,7 @@ class MediaSendViewModel extends ViewModel {
 
       if (splitMessage.getTextSlide().isPresent()) {
         Slide slide = splitMessage.getTextSlide().get();
-        uploadRepository.startUpload(new Media(Objects.requireNonNull(slide.getUri()), slide.getContentType(), System.currentTimeMillis(), 0, 0, slide.getFileSize(), 0, Optional.absent(), Optional.absent(), Optional.absent()), recipient);
+        uploadRepository.startUpload(new Media(Objects.requireNonNull(slide.getUri()), slide.getContentType(), System.currentTimeMillis(), 0, 0, slide.getFileSize(), 0, slide.isBorderless(), Optional.absent(), Optional.absent(), Optional.absent()), recipient);
       }
 
       uploadRepository.applyMediaUpdates(oldToNew, recipient);
@@ -489,12 +495,12 @@ class MediaSendViewModel extends ViewModel {
       uploadRepository.updateDisplayOrder(updatedMedia);
       uploadRepository.getPreUploadResults(uploadResults -> {
         if (recipients.size() > 0) {
-          sendMessages(recipients, splitBody, uploadResults);
+          sendMessages(recipients, splitBody, uploadResults, trimmedMentions);
           uploadRepository.deleteAbandonedAttachments();
         }
 
         Util.cancelRunnableOnMain(dialogRunnable);
-        result.postValue(MediaSendActivityResult.forPreUpload(uploadResults, splitBody, transport, isViewOnce()));
+        result.postValue(MediaSendActivityResult.forPreUpload(uploadResults, splitBody, transport, isViewOnce(), trimmedMentions));
       });
     });
 
@@ -595,7 +601,7 @@ class MediaSendViewModel extends ViewModel {
   }
 
   private boolean viewOnceSupported() {
-    return !isSms && (recipient == null || !recipient.isLocalNumber()) && mediaSupportsRevealableMessage(getSelectedMediaOrDefault());
+    return !isSms && (recipient == null || !recipient.isSelf()) && mediaSupportsRevealableMessage(getSelectedMediaOrDefault());
   }
 
   private boolean mediaSupportsRevealableMessage(@NonNull List<Media> media) {
@@ -628,7 +634,7 @@ class MediaSendViewModel extends ViewModel {
   }
 
   @WorkerThread
-  private void sendMessages(@NonNull List<Recipient> recipients, @NonNull String body, @NonNull Collection<PreUploadResult> preUploadResults) {
+  private void sendMessages(@NonNull List<Recipient> recipients, @NonNull String body, @NonNull Collection<PreUploadResult> preUploadResults, @NonNull List<Mention> mentions) {
     List<OutgoingSecureMediaMessage> messages = new ArrayList<>(recipients.size());
 
     for (Recipient recipient : recipients) {
@@ -643,6 +649,7 @@ class MediaSendViewModel extends ViewModel {
                                                                 null,
                                                                 Collections.emptyList(),
                                                                 Collections.emptyList(),
+                                                                mentions,
                                                                 Collections.emptyList(),
                                                                 Collections.emptyList());
 
@@ -670,7 +677,7 @@ class MediaSendViewModel extends ViewModel {
   }
 
   enum Error {
-    ITEM_TOO_LARGE, TOO_MANY_ITEMS, NO_ITEMS
+    ITEM_TOO_LARGE, TOO_MANY_ITEMS, NO_ITEMS, ONLY_ITEM_TOO_LARGE
   }
 
   enum Event {

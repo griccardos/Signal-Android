@@ -26,6 +26,7 @@ import androidx.annotation.Nullable;
 
 import org.thoughtcrime.securesms.attachments.Attachment;
 import org.thoughtcrime.securesms.attachments.UriAttachment;
+import org.thoughtcrime.securesms.audio.AudioHash;
 import org.thoughtcrime.securesms.blurhash.BlurHash;
 import org.thoughtcrime.securesms.database.AttachmentDatabase;
 import org.thoughtcrime.securesms.stickers.StickerLocator;
@@ -51,12 +52,7 @@ public abstract class Slide {
 
   @Nullable
   public Uri getUri() {
-    return attachment.getDataUri();
-  }
-
-  @Nullable
-  public Uri getThumbnailUri() {
-    return attachment.getThumbnailUri();
+    return attachment.getUri();
   }
 
   @NonNull
@@ -109,6 +105,10 @@ public abstract class Slide {
     return false;
   }
 
+  public boolean isBorderless() {
+    return false;
+  }
+
   public @NonNull String getContentDescription() { return ""; }
 
   public @NonNull Attachment asAttachment() {
@@ -155,10 +155,12 @@ public abstract class Slide {
                                                          @Nullable String         caption,
                                                          @Nullable StickerLocator stickerLocator,
                                                          @Nullable BlurHash       blurHash,
+                                                         @Nullable AudioHash      audioHash,
                                                                    boolean        voiceNote,
+                                                                   boolean        borderless,
                                                                    boolean        quote)
   {
-    return constructAttachmentFromUri(context, uri, defaultMime, size, width, height, hasThumbnail, fileName, caption, stickerLocator, blurHash, voiceNote, quote, null);
+    return constructAttachmentFromUri(context, uri, defaultMime, size, width, height, hasThumbnail, fileName, caption, stickerLocator, blurHash, audioHash, voiceNote, borderless, quote, null);
   }
 
   protected static Attachment constructAttachmentFromUri(@NonNull  Context        context,
@@ -172,14 +174,15 @@ public abstract class Slide {
                                                          @Nullable String         caption,
                                                          @Nullable StickerLocator stickerLocator,
                                                          @Nullable BlurHash       blurHash,
+                                                         @Nullable AudioHash      audioHash,
                                                                    boolean        voiceNote,
+                                                                   boolean        borderless,
                                                                    boolean        quote,
                                                          @Nullable AttachmentDatabase.TransformProperties transformProperties)
   {
     String                 resolvedType    = Optional.fromNullable(MediaUtil.getMimeType(context, uri)).or(defaultMime);
     String                 fastPreflightId = String.valueOf(new SecureRandom().nextLong());
     return new UriAttachment(uri,
-                             hasThumbnail ? uri : null,
                              resolvedType,
                              AttachmentDatabase.TRANSFER_PROGRESS_STARTED,
                              size,
@@ -188,10 +191,12 @@ public abstract class Slide {
                              fileName,
                              fastPreflightId,
                              voiceNote,
+                             borderless,
                              quote,
                              caption,
                              stickerLocator,
                              blurHash,
+                             audioHash,
                              transformProperties);
   }
 
@@ -199,7 +204,10 @@ public abstract class Slide {
     Optional<String> fileName = getFileName();
 
     if (fileName.isPresent()) {
-      return Optional.of(getFileType(fileName));
+      String fileType = getFileType(fileName);
+      if (!fileType.isEmpty()) {
+        return Optional.of(fileType);
+      }
     }
 
     return Optional.fromNullable(MediaUtil.getExtension(context, getUri()));
@@ -235,13 +243,12 @@ public abstract class Slide {
            this.hasImage() == that.hasImage()                        &&
            this.hasVideo() == that.hasVideo()                        &&
            this.getTransferState() == that.getTransferState()        &&
-           Util.equals(this.getUri(), that.getUri())                 &&
-           Util.equals(this.getThumbnailUri(), that.getThumbnailUri());
+           Util.equals(this.getUri(), that.getUri());
   }
 
   @Override
   public int hashCode() {
     return Util.hashCode(getContentType(), hasAudio(), hasImage(),
-                         hasVideo(), getUri(), getThumbnailUri(), getTransferState());
+                         hasVideo(), getUri(), getTransferState());
   }
 }

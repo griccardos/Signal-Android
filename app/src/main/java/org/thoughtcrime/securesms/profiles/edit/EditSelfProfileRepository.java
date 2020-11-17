@@ -33,6 +33,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 class EditSelfProfileRepository implements EditProfileRepository {
 
@@ -108,7 +110,18 @@ class EditSelfProfileRepository implements EditProfileRepository {
   }
 
   @Override
-  public void uploadProfile(@NonNull ProfileName profileName, @Nullable String displayName, @Nullable byte[] avatar, boolean avatarChanged, @NonNull Consumer<UploadResult> uploadResultConsumer) {
+  public void getCurrentName(@NonNull Consumer<String> nameConsumer) {
+    nameConsumer.accept("");
+  }
+
+  @Override
+  public void uploadProfile(@NonNull ProfileName profileName,
+                            @NonNull String displayName,
+                            boolean displayNameChanged,
+                            @Nullable byte[] avatar,
+                            boolean avatarChanged,
+                            @NonNull Consumer<UploadResult> uploadResultConsumer)
+  {
     SimpleTask.run(() -> {
       DatabaseFactory.getRecipientDatabase(context).setProfileName(Recipient.self().getId(), profileName);
 
@@ -131,19 +144,6 @@ class EditSelfProfileRepository implements EditProfileRepository {
 
   @Override
   public void getCurrentUsername(@NonNull Consumer<Optional<String>> callback) {
-    callback.accept(Optional.fromNullable(TextSecurePreferences.getLocalUsername(context)));
-    SignalExecutors.UNBOUNDED.execute(() -> callback.accept(getUsernameInternal()));
-  }
-
-  @WorkerThread
-  private @NonNull Optional<String> getUsernameInternal() {
-    try {
-      SignalServiceProfile profile = ProfileUtil.retrieveProfile(context, Recipient.self(), SignalServiceProfile.RequestType.PROFILE).getProfile();
-      TextSecurePreferences.setLocalUsername(context, profile.getUsername());
-      DatabaseFactory.getRecipientDatabase(context).setUsername(Recipient.self().getId(), profile.getUsername());
-    } catch (IOException e) {
-      Log.w(TAG, "Failed to retrieve username remotely! Using locally-cached version.");
-    }
-    return Optional.fromNullable(TextSecurePreferences.getLocalUsername(context));
+    callback.accept(Recipient.self().getUsername());
   }
 }

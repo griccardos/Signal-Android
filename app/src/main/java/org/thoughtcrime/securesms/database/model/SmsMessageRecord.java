@@ -49,12 +49,13 @@ public class SmsMessageRecord extends MessageRecord {
                           int status, List<IdentityKeyMismatch> mismatches,
                           int subscriptionId, long expiresIn, long expireStarted,
                           int readReceiptCount, boolean unidentified,
-                          @NonNull List<ReactionRecord> reactions, boolean remoteDelete)
+                          @NonNull List<ReactionRecord> reactions, boolean remoteDelete,
+                          long notifiedTimestamp)
   {
     super(id, body, recipient, individualRecipient, recipientDeviceId,
           dateSent, dateReceived, dateServer, threadId, status, deliveryReceiptCount, type,
           mismatches, new LinkedList<>(), subscriptionId,
-          expiresIn, expireStarted, readReceiptCount, unidentified, reactions, remoteDelete);
+          expiresIn, expireStarted, readReceiptCount, unidentified, reactions, remoteDelete, notifiedTimestamp);
   }
 
   public long getType() {
@@ -84,7 +85,7 @@ public class SmsMessageRecord extends MessageRecord {
     } else if (isEndSession() && isOutgoing()) {
       return emphasisAdded(context.getString(R.string.SmsMessageRecord_secure_session_reset));
     } else if (isEndSession()) {
-      return emphasisAdded(context.getString(R.string.SmsMessageRecord_secure_session_reset_s, getIndividualRecipient().toShortString(context)));
+      return emphasisAdded(context.getString(R.string.SmsMessageRecord_secure_session_reset_s, getIndividualRecipient().getDisplayName(context)));
     } else if (SmsDatabase.Types.isUnsupportedMessageType(type)) {
       return emphasisAdded(context.getString(R.string.SmsMessageRecord_this_message_could_not_be_processed_because_it_was_sent_from_a_newer_version));
     } else if (SmsDatabase.Types.isInvalidMessageType(type)) {

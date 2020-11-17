@@ -14,7 +14,7 @@
         <com.google.android.material.appbar.CollapsingToolbarLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="?attr/shared_contact_details_header_background">
+            android:background="@color/signal_background_tertiary">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -93,18 +93,18 @@
                             android:gravity="center"
                             android:padding="10dp">
 
-                            <ImageView
+                            <androidx.appcompat.widget.AppCompatImageView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginBottom="6dp"
-                                android:tint="@color/core_ultramarine"
+                                android:tint="?attr/colorAccent"
                                 android:src="@drawable/message_24dp"/>
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="@string/SharedContactDetailsActivity_signal_message"
-                                android:textColor="@color/core_ultramarine"/>
+                                android:textColor="?attr/colorAccent"/>
 
                         </LinearLayout>
 
@@ -117,18 +117,18 @@
                             android:gravity="center"
                             android:padding="10dp">
 
-                            <ImageView
+                            <androidx.appcompat.widget.AppCompatImageView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginBottom="6dp"
-                                android:tint="@color/core_ultramarine"
+                                android:tint="?attr/colorAccent"
                                 android:src="@drawable/phone_24dp"/>
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="@string/SharedContactDetailsActivity_signal_call"
-                                android:textColor="@color/core_ultramarine"/>
+                                android:textColor="?attr/colorAccent"/>
 
                         </LinearLayout>
 

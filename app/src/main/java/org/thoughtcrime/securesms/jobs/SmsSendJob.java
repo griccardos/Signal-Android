@@ -9,6 +9,9 @@ import androidx.annotation.NonNull;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.SmsManager;
 
+import org.thoughtcrime.securesms.database.Database;
+import org.thoughtcrime.securesms.database.MessageDatabase;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.jobmanager.Job;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkOrCellServiceConstraint;
@@ -17,7 +20,6 @@ import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.NoSuchMessageException;
 import org.thoughtcrime.securesms.database.SmsDatabase;
 import org.thoughtcrime.securesms.database.model.SmsMessageRecord;
-import org.thoughtcrime.securesms.notifications.MessageNotifier;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.service.SmsDeliveryListener;
 import org.thoughtcrime.securesms.transport.UndeliverableMessageException;
@@ -66,14 +68,19 @@ public class SmsSendJob extends SendJob {
   }
 
   @Override
+  public void onAdded() {
+    DatabaseFactory.getSmsDatabase(context).markAsSending(messageId);
+  }
+
+  @Override
   public void onSend() throws NoSuchMessageException, TooManyRetriesException {
     if (runAttempt >= MAX_ATTEMPTS) {
       warn(TAG, "Hit the retry limit. Failing.");
       throw new TooManyRetriesException();
     }
 
-    SmsDatabase      database = DatabaseFactory.getSmsDatabase(context);
-    SmsMessageRecord record   = database.getMessage(messageId);
+    MessageDatabase  database = DatabaseFactory.getSmsDatabase(context);
+    SmsMessageRecord record   = database.getSmsMessage(messageId);
 
     if (!record.isPending() && !record.isFailed()) {
       warn(TAG, "Message " + messageId + " was already sent. Ignoring.");
@@ -81,13 +88,13 @@ public class SmsSendJob extends SendJob {
     }
 
     try {
-      log(TAG, "Sending message: " + messageId + " (attempt " + runAttempt + ")");
+      log(TAG, String.valueOf(record.getDateSent()), "Sending message: " + messageId + " (attempt " + runAttempt + ")");
       deliver(record);
-      log(TAG, "Sent message: " + messageId);
+      log(TAG, String.valueOf(record.getDateSent()), "Sent message: " + messageId);
     } catch (UndeliverableMessageException ude) {
       warn(TAG, ude);
       DatabaseFactory.getSmsDatabase(context).markAsSentFailed(record.getId());
-      MessageNotifier.notifyMessageDeliveryFailed(context, record.getRecipient(), record.getThreadId());
+      ApplicationDependencies.getMessageNotifier().notifyMessageDeliveryFailed(context, record.getRecipient(), record.getThreadId());
     }
   }
 
@@ -105,7 +112,7 @@ public class SmsSendJob extends SendJob {
     DatabaseFactory.getSmsDatabase(context).markAsSentFailed(messageId);
 
     if (threadId != -1 && recipient != null) {
-      MessageNotifier.notifyMessageDeliveryFailed(context, recipient, threadId);
+      ApplicationDependencies.getMessageNotifier().notifyMessageDeliveryFailed(context, recipient, threadId);
     }
   }
 
@@ -142,8 +149,8 @@ public class SmsSendJob extends SendJob {
       getSmsManagerFor(message.getSubscriptionId()).sendMultipartTextMessage(recipient, null, messages, sentIntents, deliveredIntents);
     } catch (NullPointerException | IllegalArgumentException npe) {
       warn(TAG, npe);
-      log(TAG, "Recipient: " + recipient);
-      log(TAG, "Message Parts: " + messages.size());
+      log(TAG, String.valueOf(message.getDateSent()), "Recipient: " + recipient);
+      log(TAG, String.valueOf(message.getDateSent()), "Message Parts: " + messages.size());
 
       try {
         for (int i=0;i<messages.size();i++) {

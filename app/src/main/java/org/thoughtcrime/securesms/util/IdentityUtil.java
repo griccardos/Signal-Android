@@ -14,10 +14,11 @@ import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.GroupDatabase;
 import org.thoughtcrime.securesms.database.IdentityDatabase;
 import org.thoughtcrime.securesms.database.IdentityDatabase.IdentityRecord;
-import org.thoughtcrime.securesms.database.MessagingDatabase.InsertResult;
+import org.thoughtcrime.securesms.database.MessageDatabase;
+import org.thoughtcrime.securesms.database.MessageDatabase.InsertResult;
 import org.thoughtcrime.securesms.database.SmsDatabase;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.logging.Log;
-import org.thoughtcrime.securesms.notifications.MessageNotifier;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.thoughtcrime.securesms.sms.IncomingIdentityDefaultMessage;
@@ -66,9 +67,9 @@ public class IdentityUtil {
 
   public static void markIdentityVerified(Context context, Recipient recipient, boolean verified, boolean remote)
   {
-    long          time          = System.currentTimeMillis();
-    SmsDatabase   smsDatabase   = DatabaseFactory.getSmsDatabase(context);
-    GroupDatabase groupDatabase = DatabaseFactory.getGroupDatabase(context);
+    long            time          = System.currentTimeMillis();
+    MessageDatabase smsDatabase   = DatabaseFactory.getSmsDatabase(context);
+    GroupDatabase   groupDatabase = DatabaseFactory.getGroupDatabase(context);
 
     try (GroupDatabase.Reader reader = groupDatabase.getGroups()) {
 
@@ -120,19 +121,20 @@ public class IdentityUtil {
   }
 
   public static void markIdentityUpdate(@NonNull Context context, @NonNull RecipientId recipientId) {
-    long                 time          = System.currentTimeMillis();
-    SmsDatabase          smsDatabase   = DatabaseFactory.getSmsDatabase(context);
-    GroupDatabase        groupDatabase = DatabaseFactory.getGroupDatabase(context);
-    GroupDatabase.Reader reader        = groupDatabase.getGroups();
+    long            time          = System.currentTimeMillis();
+    MessageDatabase smsDatabase   = DatabaseFactory.getSmsDatabase(context);
+    GroupDatabase   groupDatabase = DatabaseFactory.getGroupDatabase(context);
 
-    GroupDatabase.GroupRecord groupRecord;
+    try (GroupDatabase.Reader reader = groupDatabase.getGroups()) {
+      GroupDatabase.GroupRecord groupRecord;
 
-    while ((groupRecord = reader.getNext()) != null) {
-      if (groupRecord.getMembers().contains(recipientId) && groupRecord.isActive()) {
-        IncomingTextMessage           incoming    = new IncomingTextMessage(recipientId, 1, time, time, null, Optional.of(groupRecord.getId()), 0, false);
-        IncomingIdentityUpdateMessage groupUpdate = new IncomingIdentityUpdateMessage(incoming);
+      while ((groupRecord = reader.getNext()) != null) {
+        if (groupRecord.getMembers().contains(recipientId) && groupRecord.isActive()) {
+          IncomingTextMessage           incoming    = new IncomingTextMessage(recipientId, 1, time, time, null, Optional.of(groupRecord.getId()), 0, false);
+          IncomingIdentityUpdateMessage groupUpdate = new IncomingIdentityUpdateMessage(incoming);
 
-        smsDatabase.insertMessageInbox(groupUpdate);
+          smsDatabase.insertMessageInbox(groupUpdate);
+        }
       }
     }
 
@@ -141,7 +143,7 @@ public class IdentityUtil {
     Optional<InsertResult>        insertResult     = smsDatabase.insertMessageInbox(individualUpdate);
 
     if (insertResult.isPresent()) {
-      MessageNotifier.updateNotification(context, insertResult.get().getThreadId());
+      ApplicationDependencies.getMessageNotifier().updateNotification(context, insertResult.get().getThreadId());
     }
   }
 
@@ -231,11 +233,11 @@ public class IdentityUtil {
     if (recipients.isEmpty()) return null;
 
     if (recipients.size() == 1) {
-      String name = recipients.get(0).toShortString(context);
+      String name = recipients.get(0).getDisplayName(context);
       return context.getString(resourceOne, name);
     } else {
-      String firstName  = recipients.get(0).toShortString(context);
-      String secondName = recipients.get(1).toShortString(context);
+      String firstName  = recipients.get(0).getDisplayName(context);
+      String secondName = recipients.get(1).getDisplayName(context);
 
       if (recipients.size() == 2) {
         return context.getString(resourceTwo, firstName, secondName);

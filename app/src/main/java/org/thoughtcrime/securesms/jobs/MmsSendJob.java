@@ -26,9 +26,10 @@ import org.thoughtcrime.securesms.attachments.Attachment;
 import org.thoughtcrime.securesms.attachments.DatabaseAttachment;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.GroupDatabase;
-import org.thoughtcrime.securesms.database.MmsDatabase;
+import org.thoughtcrime.securesms.database.MessageDatabase;
 import org.thoughtcrime.securesms.database.NoSuchMessageException;
 import org.thoughtcrime.securesms.database.ThreadDatabase;
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.jobmanager.Job;
 import org.thoughtcrime.securesms.jobmanager.JobLogger;
@@ -41,7 +42,6 @@ import org.thoughtcrime.securesms.mms.MmsException;
 import org.thoughtcrime.securesms.mms.MmsSendResult;
 import org.thoughtcrime.securesms.mms.OutgoingMediaMessage;
 import org.thoughtcrime.securesms.mms.PartAuthority;
-import org.thoughtcrime.securesms.notifications.MessageNotifier;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.transport.InsecureFallbackApprovalException;
 import org.thoughtcrime.securesms.transport.UndeliverableMessageException;
@@ -78,7 +78,7 @@ public final class MmsSendJob extends SendJob {
   /** Enqueues compression jobs for attachments and finally the MMS send job. */
   @WorkerThread
   public static void enqueue(@NonNull Context context, @NonNull JobManager jobManager, long messageId) {
-    MmsDatabase          database = DatabaseFactory.getMmsDatabase(context);
+    MessageDatabase      database = DatabaseFactory.getMmsDatabase(context);
     OutgoingMediaMessage message;
 
     try {
@@ -114,8 +114,13 @@ public final class MmsSendJob extends SendJob {
   }
 
   @Override
+  public void onAdded() {
+    DatabaseFactory.getMmsDatabase(context).markAsSending(messageId);
+  }
+
+  @Override
   public void onSend() throws MmsException, NoSuchMessageException, IOException {
-    MmsDatabase          database = DatabaseFactory.getMmsDatabase(context);
+    MessageDatabase      database = DatabaseFactory.getMmsDatabase(context);
     OutgoingMediaMessage message  = database.getOutgoingMessage(messageId);
 
     if (database.isSent(messageId)) {
@@ -267,7 +272,7 @@ public final class MmsSendJob extends SendJob {
 
     for (Attachment attachment : scaledAttachments) {
       try {
-        if (attachment.getDataUri() == null) throw new IOException("Assertion failed, attachment for outgoing MMS has no data!");
+        if (attachment.getUri() == null) throw new IOException("Assertion failed, attachment for outgoing MMS has no data!");
 
         String  fileName = attachment.getFileName();
         PduPart part     = new PduPart();
@@ -290,7 +295,7 @@ public final class MmsSendJob extends SendJob {
         int index = fileName.lastIndexOf(".");
         String contentId = (index == -1) ? fileName : fileName.substring(0, index);
         part.setContentId(contentId.getBytes());
-        part.setData(Util.readFully(PartAuthority.getAttachmentStream(context, attachment.getDataUri())));
+        part.setData(Util.readFully(PartAuthority.getAttachmentStream(context, attachment.getUri())));
 
         body.addPart(part);
         size += getPartSize(part);
@@ -333,7 +338,7 @@ public final class MmsSendJob extends SendJob {
     Recipient recipient = DatabaseFactory.getThreadDatabase(context).getRecipientForThreadId(threadId);
 
     if (recipient != null) {
-      MessageNotifier.notifyMessageDeliveryFailed(context, recipient, threadId);
+      ApplicationDependencies.getMessageNotifier().notifyMessageDeliveryFailed(context, recipient, threadId);
     }
   }
 

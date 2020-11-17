@@ -22,6 +22,7 @@ import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -56,6 +57,7 @@ import android.widget.Toast;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
@@ -85,16 +87,19 @@ import org.thoughtcrime.securesms.util.IdentityUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.ViewUtil;
+import org.thoughtcrime.securesms.util.WindowUtil;
 import org.whispersystems.libsignal.IdentityKey;
 import org.whispersystems.libsignal.fingerprint.Fingerprint;
 import org.whispersystems.libsignal.fingerprint.FingerprintParsingException;
 import org.whispersystems.libsignal.fingerprint.FingerprintVersionMismatchException;
 import org.whispersystems.libsignal.fingerprint.NumericFingerprintGenerator;
+import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.util.UuidUtil;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
 import java.util.Locale;
+import java.util.UUID;
 
 import static org.whispersystems.libsignal.SessionCipher.SESSION_LOCK;
 
@@ -104,7 +109,7 @@ import static org.whispersystems.libsignal.SessionCipher.SESSION_LOCK;
  * @author Moxie Marlinspike
  */
 @SuppressLint("StaticFieldLeak")
-public class VerifyIdentityActivity extends PassphraseRequiredActionBarActivity implements ScanListener, View.OnClickListener {
+public class VerifyIdentityActivity extends PassphraseRequiredActivity implements ScanListener, View.OnClickListener {
 
   private static final String TAG = Log.tag(VerifyIdentityActivity.class);
 
@@ -224,9 +229,7 @@ public class VerifyIdentityActivity extends PassphraseRequiredActionBarActivity 
   private void setActionBarNotificationBarColor(MaterialColor color) {
     getSupportActionBar().setBackgroundDrawable(new ColorDrawable(color.toActionBarColor(this)));
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-      getWindow().setStatusBarColor(color.toStatusBarColor(this));
-    }
+    WindowUtil.setStatusBarColor(getWindow(), color.toStatusBarColor(this));
   }
 
   public static class VerifyDisplayFragment extends Fragment implements CompoundButton.OnCheckedChangeListener {
@@ -307,16 +310,26 @@ public class VerifyIdentityActivity extends PassphraseRequiredActionBarActivity 
       byte[] localId;
       byte[] remoteId;
 
-      if (FeatureFlags.uuids() && recipient.resolve().getUuid().isPresent()) {
+      Recipient resolved = recipient.resolve();
+
+      if (FeatureFlags.verifyV2() && resolved.getUuid().isPresent()) {
         Log.i(TAG, "Using UUID (version 2).");
         version  = 2;
         localId  = UuidUtil.toByteArray(TextSecurePreferences.getLocalUuid(requireContext()));
-        remoteId = UuidUtil.toByteArray(recipient.resolve().getUuid().get());
-      } else {
+        remoteId = UuidUtil.toByteArray(resolved.getUuid().get());
+      } else if (!FeatureFlags.verifyV2() && resolved.getE164().isPresent()) {
         Log.i(TAG, "Using E164 (version 1).");
         version  = 1;
         localId  = TextSecurePreferences.getLocalNumber(requireContext()).getBytes();
-        remoteId = recipient.resolve().requireE164().getBytes();
+        remoteId = resolved.requireE164().getBytes();
+      } else {
+        Log.w(TAG, String.format(Locale.ENGLISH, "Could not show proper verification! verifyV2: %s, hasUuid: %s, hasE164: %s", FeatureFlags.verifyV2(), resolved.getUuid().isPresent(), resolved.getE164().isPresent()));
+        new AlertDialog.Builder(requireContext())
+                       .setMessage(getString(R.string.VerifyIdentityActivity_you_must_first_exchange_messages_in_order_to_view, resolved.getDisplayName(requireContext())))
+                       .setPositiveButton(android.R.string.ok, (dialog, which) -> requireActivity().finish())
+                       .setOnDismissListener(dialog -> requireActivity().finish())
+                       .show();
+        return;
       }
 
       this.recipient.observe(this, this::setRecipientText);
@@ -486,7 +499,7 @@ public class VerifyIdentityActivity extends PassphraseRequiredActionBarActivity 
     }
 
     private void setRecipientText(Recipient recipient) {
-      description.setText(Html.fromHtml(String.format(getActivity().getString(R.string.verify_display_fragment__if_you_wish_to_verify_the_security_of_your_end_to_end_encryption_with_s), recipient.toShortString(getContext()))));
+      description.setText(Html.fromHtml(String.format(getActivity().getString(R.string.verify_display_fragment__if_you_wish_to_verify_the_security_of_your_end_to_end_encryption_with_s), recipient.getDisplayName(getContext()))));
       description.setMovementMethod(LinkMovementMethod.getInstance());
     }
 

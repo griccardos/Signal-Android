@@ -1,5 +1,7 @@
 package org.thoughtcrime.securesms.jobs;
 
+import android.net.Network;
+
 import androidx.annotation.NonNull;
 
 import com.annimon.stream.Stream;
@@ -7,14 +9,18 @@ import com.annimon.stream.Stream;
 import org.thoughtcrime.securesms.crypto.UnidentifiedAccessUtil;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.GroupDatabase;
+import org.thoughtcrime.securesms.database.RecipientDatabase;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.jobmanager.Job;
+import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientUtil;
+import org.thoughtcrime.securesms.util.FeatureFlags;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.whispersystems.libsignal.util.guava.Optional;
+import org.whispersystems.signalservice.api.CancelationException;
 import org.whispersystems.signalservice.api.SignalServiceMessageSender;
 import org.whispersystems.signalservice.api.crypto.UnidentifiedAccessPair;
 import org.whispersystems.signalservice.api.messages.SignalServiceTypingMessage;
@@ -39,12 +45,18 @@ public class TypingSendJob extends BaseJob {
 
   public TypingSendJob(long threadId, boolean typing) {
     this(new Job.Parameters.Builder()
-                           .setQueue("TYPING_" + threadId)
+                           .setQueue(getQueue(threadId))
                            .setMaxAttempts(1)
                            .setLifespan(TimeUnit.SECONDS.toMillis(5))
+                           .addConstraint(NetworkConstraint.KEY)
+                           .setMemoryOnly(true)
                            .build(),
          threadId,
          typing);
+  }
+
+  public static String getQueue(long threadId) {
+    return "TYPING_" + threadId;
   }
 
   private TypingSendJob(@NonNull Job.Parameters parameters, long threadId, boolean typing) {
@@ -94,14 +106,25 @@ public class TypingSendJob extends BaseJob {
       groupId    = Optional.of(recipient.requireGroupId().getDecodedId());
     }
 
-    recipients = Stream.of(recipients).map(Recipient::resolve).toList();
+    recipients = RecipientUtil.getEligibleForSending(Stream.of(recipients)
+                                                           .map(Recipient::resolve)
+                                                           .toList());
 
     SignalServiceMessageSender             messageSender      = ApplicationDependencies.getSignalServiceMessageSender();
-    List<SignalServiceAddress>             addresses          = Stream.of(recipients).map(r -> RecipientUtil.toSignalServiceAddress(context, r)).toList();
-    List<Optional<UnidentifiedAccessPair>> unidentifiedAccess = Stream.of(recipients).map(r -> UnidentifiedAccessUtil.getAccessFor(context, r)).toList();
+    List<SignalServiceAddress>             addresses          = RecipientUtil.toSignalServiceAddressesFromResolved(context, recipients);
+    List<Optional<UnidentifiedAccessPair>> unidentifiedAccess = UnidentifiedAccessUtil.getAccessFor(context, recipients);
     SignalServiceTypingMessage             typingMessage      = new SignalServiceTypingMessage(typing ? Action.STARTED : Action.STOPPED, System.currentTimeMillis(), groupId);
 
-    messageSender.sendTyping(addresses, unidentifiedAccess, typingMessage);
+    if (isCanceled()) {
+      Log.w(TAG, "Canceled before send!");
+      return;
+    }
+
+    try {
+      messageSender.sendTyping(addresses, unidentifiedAccess, typingMessage, this::isCanceled);
+    } catch (CancelationException e) {
+      Log.w(TAG, "Canceled during send!");
+    }
   }
 
   @Override

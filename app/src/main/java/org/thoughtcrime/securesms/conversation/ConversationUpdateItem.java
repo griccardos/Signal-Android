@@ -1,55 +1,58 @@
 package org.thoughtcrime.securesms.conversation;
 
 import android.content.Context;
-import android.graphics.ColorFilter;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
+import android.text.Spannable;
+import android.text.SpannableString;
 import android.util.AttributeSet;
 import android.view.View;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.ContextCompat;
+import androidx.lifecycle.LifecycleOwner;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.Observer;
 
 import org.thoughtcrime.securesms.BindableConversationItem;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.VerifyIdentityActivity;
 import org.thoughtcrime.securesms.database.IdentityDatabase.IdentityRecord;
+import org.thoughtcrime.securesms.database.model.LiveUpdateMessage;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
+import org.thoughtcrime.securesms.database.model.UpdateDescription;
 import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mms.GlideRequests;
 import org.thoughtcrime.securesms.recipients.LiveRecipient;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.thoughtcrime.securesms.recipients.RecipientForeverObserver;
-import org.thoughtcrime.securesms.util.DateUtils;
-import org.thoughtcrime.securesms.util.ExpirationUtil;
-import org.thoughtcrime.securesms.util.GroupUtil;
 import org.thoughtcrime.securesms.util.IdentityUtil;
-import org.thoughtcrime.securesms.util.ThemeUtil;
 import org.thoughtcrime.securesms.util.concurrent.ListenableFuture;
+import org.thoughtcrime.securesms.util.livedata.LiveDataUtil;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
-public class ConversationUpdateItem extends LinearLayout
-    implements RecipientForeverObserver, BindableConversationItem
+public final class ConversationUpdateItem extends LinearLayout
+                                          implements BindableConversationItem
 {
   private static final String TAG = ConversationUpdateItem.class.getSimpleName();
 
-  private Set<MessageRecord> batchSelected;
+  private Set<ConversationMessage> batchSelected;
 
-  private ImageView     icon;
-  private TextView      title;
-  private TextView      body;
-  private TextView      date;
-  private LiveRecipient sender;
-  private MessageRecord messageRecord;
-  private Locale        locale;
+  private TextView                body;
+  private TextView                actionButton;
+  private LiveRecipient           sender;
+  private ConversationMessage     conversationMessage;
+  private Optional<MessageRecord> nextMessageRecord;
+  private MessageRecord           messageRecord;
+  private LiveData<Spannable>     displayBody;
+  private EventListener           eventListener;
+
+  private final UpdateObserver updateObserver = new UpdateObserver();
+  private final SenderObserver senderObserver = new SenderObserver();
 
   public ConversationUpdateItem(Context context) {
     super(context);
@@ -62,167 +65,121 @@ public class ConversationUpdateItem extends LinearLayout
   @Override
   public void onFinishInflate() {
     super.onFinishInflate();
-
-    this.icon  = findViewById(R.id.conversation_update_icon);
-    this.title = findViewById(R.id.conversation_update_title);
-    this.body  = findViewById(R.id.conversation_update_body);
-    this.date  = findViewById(R.id.conversation_update_date);
+    this.body         = findViewById(R.id.conversation_update_body);
+    this.actionButton = findViewById(R.id.conversation_update_action);
 
     this.setOnClickListener(new InternalClickListener(null));
   }
 
   @Override
-  public void bind(@NonNull MessageRecord           messageRecord,
+  public void bind(@NonNull LifecycleOwner lifecycleOwner,
+                   @NonNull ConversationMessage conversationMessage,
                    @NonNull Optional<MessageRecord> previousMessageRecord,
                    @NonNull Optional<MessageRecord> nextMessageRecord,
-                   @NonNull GlideRequests           glideRequests,
-                   @NonNull Locale                  locale,
-                   @NonNull Set<MessageRecord>      batchSelected,
-                   @NonNull Recipient               conversationRecipient,
-                   @Nullable String                 searchQuery,
-                            boolean                 pulseUpdate)
+                   @NonNull GlideRequests glideRequests,
+                   @NonNull Locale locale,
+                   @NonNull Set<ConversationMessage> batchSelected,
+                   @NonNull Recipient conversationRecipient,
+                   @Nullable String searchQuery,
+                   boolean pulseMention)
   {
     this.batchSelected = batchSelected;
 
-    bind(messageRecord, locale);
+    bind(lifecycleOwner, conversationMessage, nextMessageRecord);
   }
 
   @Override
   public void setEventListener(@Nullable EventListener listener) {
-    // No events to report yet
+    this.eventListener = listener;
   }
 
   @Override
-  public MessageRecord getMessageRecord() {
-    return messageRecord;
+  public ConversationMessage getConversationMessage() {
+    return conversationMessage;
   }
 
-  private void bind(@NonNull MessageRecord messageRecord, @NonNull Locale locale) {
-    if (this.sender != null) {
-      this.sender.removeForeverObserver(this);
+  private void bind(@NonNull LifecycleOwner lifecycleOwner,
+                    @NonNull ConversationMessage conversationMessage,
+                    @NonNull Optional<MessageRecord> nextMessageRecord)
+  {
+    this.conversationMessage = conversationMessage;
+    this.messageRecord       = conversationMessage.getMessageRecord();
+    this.nextMessageRecord   = nextMessageRecord;
+
+    observeSender(lifecycleOwner, messageRecord.getIndividualRecipient());
+
+    UpdateDescription   updateDescription = Objects.requireNonNull(messageRecord.getUpdateDisplayBody(getContext()));
+    LiveData<Spannable> liveUpdateMessage = LiveUpdateMessage.fromMessageDescription(getContext(), updateDescription);
+    LiveData<Spannable> spannableMessage  = loading(liveUpdateMessage);
+
+    present(conversationMessage, nextMessageRecord);
+
+    observeDisplayBody(lifecycleOwner, spannableMessage);
+  }
+
+  /** After a short delay, if the main data hasn't shown yet, then a loading message is displayed. */
+  private @NonNull LiveData<Spannable> loading(@NonNull LiveData<Spannable> string) {
+    return LiveDataUtil.until(string, LiveDataUtil.delay(250, new SpannableString(getContext().getString(R.string.ConversationUpdateItem_loading))));
+  }
+
+  @Override
+  public void unbind() {
+  }
+
+  private void observeSender(@NonNull LifecycleOwner lifecycleOwner, @Nullable Recipient recipient) {
+    if (sender != null) {
+      sender.getLiveData().removeObserver(senderObserver);
     }
 
-    if (this.messageRecord != null && messageRecord.isGroupAction()) {
-      GroupUtil.getDescription(getContext(), messageRecord.getBody(), messageRecord.isGroupV2()).removeObserver(this);
-    }
-
-    this.messageRecord = messageRecord;
-    this.sender        = messageRecord.getIndividualRecipient().live();
-    this.locale        = locale;
-
-    this.sender.observeForever(this);
-
-    if (this.messageRecord != null && messageRecord.isGroupAction()) {
-      GroupUtil.getDescription(getContext(), messageRecord.getBody(), messageRecord.isGroupV2()).addObserver(this);
-    }
-
-    present(messageRecord);
-  }
-
-  private void present(MessageRecord messageRecord) {
-    if      (messageRecord.isGroupAction())           setGroupRecord(messageRecord);
-    else if (messageRecord.isCallLog())               setCallRecord(messageRecord);
-    else if (messageRecord.isJoined())                setJoinedRecord(messageRecord);
-    else if (messageRecord.isExpirationTimerUpdate()) setTimerRecord(messageRecord);
-    else if (messageRecord.isEndSession())            setEndSessionRecord(messageRecord);
-    else if (messageRecord.isIdentityUpdate())        setIdentityRecord(messageRecord);
-    else if (messageRecord.isIdentityVerified() ||
-             messageRecord.isIdentityDefault())       setIdentityVerifyUpdate(messageRecord);
-    else                                              throw new AssertionError("Neither group nor log nor joined.");
-
-    if (batchSelected.contains(messageRecord)) setSelected(true);
-    else                                       setSelected(false);
-  }
-
-  private void setCallRecord(MessageRecord messageRecord) {
-    if      (messageRecord.isIncomingCall()) icon.setImageResource(R.drawable.ic_call_received_grey600_24dp);
-    else if (messageRecord.isOutgoingCall()) icon.setImageResource(R.drawable.ic_call_made_grey600_24dp);
-    else                                     icon.setImageResource(R.drawable.ic_call_missed_grey600_24dp);
-
-    body.setText(messageRecord.getDisplayBody(getContext()));
-    date.setText(DateUtils.getExtendedRelativeTimeSpanString(getContext(), locale, messageRecord.getDateReceived()));
-
-    title.setVisibility(GONE);
-    body.setVisibility(VISIBLE);
-    date.setVisibility(View.VISIBLE);
-  }
-
-  private void setTimerRecord(final MessageRecord messageRecord) {
-    if (messageRecord.getExpiresIn() > 0) {
-      icon.setImageDrawable(ContextCompat.getDrawable(getContext(), R.drawable.ic_timer_24));
+    if (recipient != null) {
+      sender = recipient.live();
+      sender.getLiveData().observe(lifecycleOwner, senderObserver);
     } else {
-      icon.setImageDrawable(ContextCompat.getDrawable(getContext(), R.drawable.ic_timer_disabled_24));
+      sender = null;
     }
-
-    icon.setColorFilter(getIconTintFilter());
-    title.setText(ExpirationUtil.getExpirationDisplayValue(getContext(), (int)(messageRecord.getExpiresIn() / 1000)));
-    body.setText(messageRecord.getDisplayBody(getContext()));
-
-    title.setVisibility(VISIBLE);
-    body.setVisibility(VISIBLE);
-    date.setVisibility(GONE);
   }
 
-  private ColorFilter getIconTintFilter() {
-    return new PorterDuffColorFilter(ThemeUtil.getThemedColor(getContext(), R.attr.icon_tint), PorterDuff.Mode.SRC_IN);
+  private void observeDisplayBody(@NonNull LifecycleOwner lifecycleOwner, @Nullable LiveData<Spannable> displayBody) {
+    if (this.displayBody != displayBody) {
+      if (this.displayBody != null) {
+        this.displayBody.removeObserver(updateObserver);
+      }
+
+      this.displayBody = displayBody;
+
+      if (this.displayBody != null) {
+        this.displayBody.observe(lifecycleOwner, updateObserver);
+      }
+    }
   }
 
-  private void setIdentityRecord(final MessageRecord messageRecord) {
-    icon.setImageDrawable(ThemeUtil.getThemedDrawable(getContext(), R.attr.safety_number_icon));
-    icon.setColorFilter(getIconTintFilter());
-    body.setText(messageRecord.getDisplayBody(getContext()));
-
-    title.setVisibility(GONE);
-    body.setVisibility(VISIBLE);
-    date.setVisibility(GONE);
+  private void setBodyText(@Nullable CharSequence text) {
+    if (text == null) {
+      body.setVisibility(INVISIBLE);
+    } else {
+      body.setText(text);
+      body.setVisibility(VISIBLE);
+    }
   }
 
-  private void setIdentityVerifyUpdate(final MessageRecord messageRecord) {
-    if (messageRecord.isIdentityVerified()) icon.setImageResource(R.drawable.ic_check_white_24dp);
-    else                                    icon.setImageResource(R.drawable.ic_info_outline_white_24dp);
+  private void present(ConversationMessage conversationMessage, @NonNull Optional<MessageRecord> nextMessageRecord) {
+    if (batchSelected.contains(conversationMessage)) setSelected(true);
+    else                                             setSelected(false);
 
-    icon.setColorFilter(getIconTintFilter());
-    body.setText(messageRecord.getDisplayBody(getContext()));
-
-    title.setVisibility(GONE);
-    body.setVisibility(VISIBLE);
-    date.setVisibility(GONE);
-  }
-
-  private void setGroupRecord(MessageRecord messageRecord) {
-    icon.setImageDrawable(ThemeUtil.getThemedDrawable(getContext(), R.attr.menu_group_icon));
-    icon.clearColorFilter();
-
-    body.setText(messageRecord.getDisplayBody(getContext()));
-
-    title.setVisibility(GONE);
-    body.setVisibility(VISIBLE);
-    date.setVisibility(GONE);
-  }
-
-  private void setJoinedRecord(MessageRecord messageRecord) {
-    icon.setImageResource(R.drawable.ic_favorite_grey600_24dp);
-    icon.clearColorFilter();
-    body.setText(messageRecord.getDisplayBody(getContext()));
-
-    title.setVisibility(GONE);
-    body.setVisibility(VISIBLE);
-    date.setVisibility(GONE);
-  }
-
-  private void setEndSessionRecord(MessageRecord messageRecord) {
-    icon.setImageResource(R.drawable.ic_refresh_white_24dp);
-    icon.setColorFilter(getIconTintFilter());
-    body.setText(messageRecord.getDisplayBody(getContext()));
-
-    title.setVisibility(GONE);
-    body.setVisibility(VISIBLE);
-    date.setVisibility(GONE);
-  }
-  
-  @Override
-  public void onRecipientChanged(@NonNull Recipient recipient) {
-    present(messageRecord);
+    if (conversationMessage.getMessageRecord().isGroupV1MigrationEvent() &&
+        (!nextMessageRecord.isPresent() || !nextMessageRecord.get().isGroupV1MigrationEvent()))
+    {
+      actionButton.setText(R.string.ConversationUpdateItem_learn_more);
+      actionButton.setVisibility(VISIBLE);
+      actionButton.setOnClickListener(v -> {
+        if (batchSelected.isEmpty() && eventListener != null) {
+          eventListener.onGroupMigrationLearnMoreClicked(conversationMessage.getMessageRecord().getGroupV1MigrationEventInvites());
+        }
+      });
+    } else {
+      actionButton.setVisibility(GONE);
+      actionButton.setOnClickListener(null);
+    }
   }
 
   @Override
@@ -230,13 +187,19 @@ public class ConversationUpdateItem extends LinearLayout
     super.setOnClickListener(new InternalClickListener(l));
   }
 
-  @Override
-  public void unbind() {
-    if (sender != null) {
-      sender.removeForeverObserver(this);
+  private final class SenderObserver implements Observer<Recipient> {
+
+    @Override
+    public void onChanged(Recipient recipient) {
+      present(conversationMessage, nextMessageRecord);
     }
-    if (this.messageRecord != null && messageRecord.isGroupAction()) {
-      GroupUtil.getDescription(getContext(), messageRecord.getBody(), messageRecord.isGroupV2()).removeObserver(this);
+  }
+
+  private final class UpdateObserver implements Observer<Spannable> {
+
+    @Override
+    public void onChanged(Spannable update) {
+      setBodyText(update);
     }
   }
 

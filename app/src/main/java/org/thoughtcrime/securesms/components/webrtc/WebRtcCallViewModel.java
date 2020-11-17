@@ -10,57 +10,37 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.Transformations;
 import androidx.lifecycle.ViewModel;
 
+import org.thoughtcrime.securesms.events.CallParticipant;
 import org.thoughtcrime.securesms.events.WebRtcViewModel;
 import org.thoughtcrime.securesms.recipients.LiveRecipient;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.thoughtcrime.securesms.ringrtc.CameraState;
 import org.thoughtcrime.securesms.util.SingleLiveEvent;
+import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.livedata.LiveDataUtil;
 
 public class WebRtcCallViewModel extends ViewModel {
 
-  private final MutableLiveData<Boolean>                remoteVideoEnabled   = new MutableLiveData<>(false);
-  private final MutableLiveData<Boolean>                microphoneEnabled    = new MutableLiveData<>(true);
-  private final MutableLiveData<WebRtcLocalRenderState> localRenderState     = new MutableLiveData<>(WebRtcLocalRenderState.GONE);
-  private final MutableLiveData<Boolean>                isInPipMode          = new MutableLiveData<>(false);
-  private final MutableLiveData<Boolean>                localVideoEnabled    = new MutableLiveData<>(false);
-  private final MutableLiveData<CameraState.Direction>  cameraDirection      = new MutableLiveData<>(CameraState.Direction.FRONT);
-  private final LiveData<Boolean>                       shouldDisplayLocal   = LiveDataUtil.combineLatest(isInPipMode, localVideoEnabled, (a, b) -> !a && b);
-  private final LiveData<WebRtcLocalRenderState>        realLocalRenderState = LiveDataUtil.combineLatest(shouldDisplayLocal, localRenderState, this::getRealLocalRenderState);
-  private final MutableLiveData<WebRtcControls>         webRtcControls       = new MutableLiveData<>(WebRtcControls.NONE);
-  private final LiveData<WebRtcControls>                realWebRtcControls   = LiveDataUtil.combineLatest(isInPipMode, webRtcControls, this::getRealWebRtcControls);
-  private final SingleLiveEvent<Event>                  events               = new SingleLiveEvent<Event>();
-  private final MutableLiveData<Long>                   ellapsed             = new MutableLiveData<>(-1L);
-  private final MutableLiveData<LiveRecipient>          liveRecipient        = new MutableLiveData<>(Recipient.UNKNOWN.live());
+  private final MutableLiveData<Boolean>               microphoneEnabled  = new MutableLiveData<>(true);
+  private final MutableLiveData<Boolean>               isInPipMode        = new MutableLiveData<>(false);
+  private final MutableLiveData<WebRtcControls>        webRtcControls     = new MutableLiveData<>(WebRtcControls.NONE);
+  private final LiveData<WebRtcControls>               realWebRtcControls = LiveDataUtil.combineLatest(isInPipMode, webRtcControls, this::getRealWebRtcControls);
+  private final SingleLiveEvent<Event>                 events             = new SingleLiveEvent<Event>();
+  private final MutableLiveData<Long>                  elapsed            = new MutableLiveData<>(-1L);
+  private final MutableLiveData<LiveRecipient>         liveRecipient      = new MutableLiveData<>(Recipient.UNKNOWN.live());
+  private final MutableLiveData<CallParticipantsState> participantsState  = new MutableLiveData<>(CallParticipantsState.STARTING_STATE);
 
-  private boolean       canDisplayTooltipIfNeeded = true;
-  private boolean       hasEnabledLocalVideo      = false;
-  private long          callConnectedTime         = -1;
-  private Handler       ellapsedTimeHandler       = new Handler(Looper.getMainLooper());
-  private boolean       answerWithVideoAvailable  = false;
-  private Runnable      ellapsedTimeRunnable      = this::handleTick;
-
+  private boolean  canDisplayTooltipIfNeeded = true;
+  private boolean  hasEnabledLocalVideo      = false;
+  private long     callConnectedTime         = -1;
+  private Handler  elapsedTimeHandler        = new Handler(Looper.getMainLooper());
+  private boolean  answerWithVideoAvailable  = false;
+  private Runnable elapsedTimeRunnable       = this::handleTick;
+  private boolean  canEnterPipMode           = false;
 
   private final WebRtcCallRepository repository = new WebRtcCallRepository();
 
-  public LiveData<Boolean> getRemoteVideoEnabled() {
-    return Transformations.distinctUntilChanged(remoteVideoEnabled);
-  }
-
   public LiveData<Boolean> getMicrophoneEnabled() {
     return Transformations.distinctUntilChanged(microphoneEnabled);
-  }
-
-  public LiveData<CameraState.Direction> getCameraDirection() {
-    return Transformations.distinctUntilChanged(cameraDirection);
-  }
-
-  public LiveData<Boolean> displaySquareCallCard() {
-    return isInPipMode;
-  }
-
-  public LiveData<WebRtcLocalRenderState> getLocalRenderState() {
-    return realLocalRenderState;
   }
 
   public LiveData<WebRtcControls> getWebRtcControls() {
@@ -80,7 +60,15 @@ public class WebRtcCallViewModel extends ViewModel {
   }
 
   public LiveData<Long> getCallTime() {
-    return Transformations.map(ellapsed, timeInCall -> callConnectedTime == -1 ? -1 : timeInCall);
+    return Transformations.map(elapsed, timeInCall -> callConnectedTime == -1 ? -1 : timeInCall);
+  }
+
+  public LiveData<CallParticipantsState> getCallParticipantsState() {
+    return participantsState;
+  }
+
+  public boolean canEnterPipMode() {
+    return canEnterPipMode;
   }
 
   public boolean isAnswerWithVideoAvailable() {
@@ -90,6 +78,15 @@ public class WebRtcCallViewModel extends ViewModel {
   @MainThread
   public void setIsInPipMode(boolean isInPipMode) {
     this.isInPipMode.setValue(isInPipMode);
+
+    //noinspection ConstantConditions
+    participantsState.setValue(CallParticipantsState.update(participantsState.getValue(), isInPipMode));
+  }
+
+  @MainThread
+  public void setIsViewingFocusedParticipant(@NonNull CallParticipantsState.SelectedPage page) {
+    //noinspection ConstantConditions
+    participantsState.setValue(CallParticipantsState.update(participantsState.getValue(), page));
   }
 
   public void onDismissedVideoTooltip() {
@@ -97,22 +94,24 @@ public class WebRtcCallViewModel extends ViewModel {
   }
 
   @MainThread
-  public void updateFromWebRtcViewModel(@NonNull WebRtcViewModel webRtcViewModel) {
-    remoteVideoEnabled.setValue(webRtcViewModel.isRemoteVideoEnabled());
-    microphoneEnabled.setValue(webRtcViewModel.isMicrophoneEnabled());
+  public void updateFromWebRtcViewModel(@NonNull WebRtcViewModel webRtcViewModel, boolean enableVideo) {
+    canEnterPipMode = webRtcViewModel.getState() != WebRtcViewModel.State.CALL_PRE_JOIN;
 
-    if (isValidCameraDirectionForUi(webRtcViewModel.getLocalCameraState().getActiveDirection())) {
-      cameraDirection.setValue(webRtcViewModel.getLocalCameraState().getActiveDirection());
-    }
+    CallParticipant localParticipant = webRtcViewModel.getLocalParticipant();
 
-    localVideoEnabled.setValue(webRtcViewModel.getLocalCameraState().isEnabled());
-    updateLocalRenderState(webRtcViewModel.getState());
+    microphoneEnabled.setValue(localParticipant.isMicrophoneEnabled());
+
+    //noinspection ConstantConditions
+    participantsState.setValue(CallParticipantsState.update(participantsState.getValue(), webRtcViewModel, enableVideo));
+
     updateWebRtcControls(webRtcViewModel.getState(),
-                         webRtcViewModel.getLocalCameraState().isEnabled(),
+                         webRtcViewModel.getGroupState(),
+                         localParticipant.getCameraState().isEnabled(),
                          webRtcViewModel.isRemoteVideoEnabled(),
                          webRtcViewModel.isRemoteVideoOffer(),
-                         webRtcViewModel.getLocalCameraState().getCameraCount() > 1,
+                         localParticipant.isMoreThanOneCameraAvailable(),
                          webRtcViewModel.isBluetoothAvailable(),
+                         Util.hasItems(webRtcViewModel.getRemoteParticipants()),
                          repository.getAudioOutput());
 
     if (webRtcViewModel.getState() == WebRtcViewModel.State.CALL_CONNECTED && callConnectedTime == -1) {
@@ -123,9 +122,9 @@ public class WebRtcCallViewModel extends ViewModel {
       callConnectedTime = -1;
     }
 
-    if (webRtcViewModel.getLocalCameraState().isEnabled()) {
+    if (localParticipant.getCameraState().isEnabled()) {
       canDisplayTooltipIfNeeded = false;
-      hasEnabledLocalVideo = true;
+      hasEnabledLocalVideo      = true;
       events.setValue(Event.DISMISS_VIDEO_TOOLTIP);
     }
 
@@ -136,60 +135,81 @@ public class WebRtcCallViewModel extends ViewModel {
     }
   }
 
-  private boolean isValidCameraDirectionForUi(CameraState.Direction direction) {
-    return direction == CameraState.Direction.FRONT || direction == CameraState.Direction.BACK;
-  }
-
-  private void updateLocalRenderState(WebRtcViewModel.State state) {
-    if (state == WebRtcViewModel.State.CALL_CONNECTED) {
-      localRenderState.setValue(WebRtcLocalRenderState.SMALL);
-    } else {
-      localRenderState.setValue(WebRtcLocalRenderState.LARGE);
-    }
-  }
-
-  private void updateWebRtcControls(WebRtcViewModel.State state,
+  private void updateWebRtcControls(@NonNull WebRtcViewModel.State state,
+                                    @NonNull WebRtcViewModel.GroupCallState groupState,
                                     boolean isLocalVideoEnabled,
                                     boolean isRemoteVideoEnabled,
                                     boolean isRemoteVideoOffer,
                                     boolean isMoreThanOneCameraAvailable,
                                     boolean isBluetoothAvailable,
-                                    WebRtcAudioOutput audioOutput)
+                                    boolean hasAtLeastOneRemote,
+                                    @NonNull WebRtcAudioOutput audioOutput)
   {
-
     final WebRtcControls.CallState callState;
 
     switch (state) {
+      case CALL_PRE_JOIN:
+        callState = WebRtcControls.CallState.PRE_JOIN;
+        break;
       case CALL_INCOMING:
         callState = WebRtcControls.CallState.INCOMING;
         answerWithVideoAvailable = isRemoteVideoOffer;
         break;
+      case CALL_OUTGOING:
+      case CALL_RINGING:
+        callState = WebRtcControls.CallState.OUTGOING;
+        break;
+      case CALL_ACCEPTED_ELSEWHERE:
+      case CALL_DECLINED_ELSEWHERE:
+      case CALL_ONGOING_ELSEWHERE:
+      case CALL_NEEDS_PERMISSION:
+      case CALL_BUSY:
+      case CALL_DISCONNECTED:
+        callState = WebRtcControls.CallState.ENDING;
+        break;
       default:
         callState = WebRtcControls.CallState.ONGOING;
+    }
+
+    final WebRtcControls.GroupCallState groupCallState;
+
+    switch (groupState) {
+      case DISCONNECTED:
+        groupCallState = WebRtcControls.GroupCallState.DISCONNECTED;
+        break;
+      case CONNECTING:
+      case RECONNECTING:
+        groupCallState = WebRtcControls.GroupCallState.CONNECTING;
+        break;
+      case CONNECTED:
+      case CONNECTED_AND_JOINING:
+      case CONNECTED_AND_JOINED:
+        groupCallState = WebRtcControls.GroupCallState.CONNECTED;
+        break;
+      default:
+        groupCallState = WebRtcControls.GroupCallState.NONE;
+        break;
     }
 
     webRtcControls.setValue(new WebRtcControls(isLocalVideoEnabled,
                                                isRemoteVideoEnabled || isRemoteVideoOffer,
                                                isMoreThanOneCameraAvailable,
                                                isBluetoothAvailable,
+                                               Boolean.TRUE.equals(isInPipMode.getValue()),
+                                               hasAtLeastOneRemote,
                                                callState,
+                                               groupCallState,
                                                audioOutput));
   }
 
-  private @NonNull WebRtcLocalRenderState getRealLocalRenderState(boolean shouldDisplayLocalVideo, @NonNull WebRtcLocalRenderState state) {
-    if (shouldDisplayLocalVideo) return state;
-    else                         return WebRtcLocalRenderState.GONE;
-  }
-
-  private @NonNull WebRtcControls getRealWebRtcControls(boolean neverDisplayControls, @NonNull WebRtcControls controls) {
-    if (neverDisplayControls) return WebRtcControls.NONE;
-    else                      return controls;
+  private @NonNull WebRtcControls getRealWebRtcControls(boolean isInPipMode, @NonNull WebRtcControls controls) {
+    return isInPipMode ? WebRtcControls.PIP : controls;
   }
 
   private void startTimer() {
     cancelTimer();
 
-    ellapsedTimeHandler.post(ellapsedTimeRunnable);
+    elapsedTimeHandler.post(elapsedTimeRunnable);
   }
 
   private void handleTick() {
@@ -199,13 +219,13 @@ public class WebRtcCallViewModel extends ViewModel {
 
     long newValue = (System.currentTimeMillis() - callConnectedTime) / 1000;
 
-    ellapsed.postValue(newValue);
+    elapsed.postValue(newValue);
 
-    ellapsedTimeHandler.postDelayed(ellapsedTimeRunnable, 1000);
+    elapsedTimeHandler.postDelayed(elapsedTimeRunnable, 1000);
   }
 
   private void cancelTimer() {
-    ellapsedTimeHandler.removeCallbacks(ellapsedTimeRunnable);
+    elapsedTimeHandler.removeCallbacks(elapsedTimeRunnable);
   }
 
   @Override

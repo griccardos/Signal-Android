@@ -1,8 +1,5 @@
 package org.thoughtcrime.securesms.registration.fragments;
 
-import android.content.Intent;
-import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -20,12 +17,12 @@ import androidx.navigation.Navigation;
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
-import org.thoughtcrime.securesms.BuildConfig;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.registration.CallMeCountDownView;
 import org.thoughtcrime.securesms.components.registration.VerificationCodeView;
 import org.thoughtcrime.securesms.components.registration.VerificationPinKeyboard;
 import org.thoughtcrime.securesms.logging.Log;
+import org.thoughtcrime.securesms.pin.PinRestoreRepository;
 import org.thoughtcrime.securesms.registration.ReceivedSmsEvent;
 import org.thoughtcrime.securesms.registration.service.CodeVerificationRequest;
 import org.thoughtcrime.securesms.registration.service.RegistrationCodeRequest;
@@ -34,12 +31,10 @@ import org.thoughtcrime.securesms.registration.viewmodel.RegistrationViewModel;
 import org.thoughtcrime.securesms.util.CommunicationActions;
 import org.thoughtcrime.securesms.util.SupportEmailUtil;
 import org.thoughtcrime.securesms.util.concurrent.AssertedSuccessListener;
-import org.whispersystems.signalservice.internal.contacts.entities.TokenResponse;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
 public final class EnterCodeFragment extends BaseRegistrationFragment {
 
@@ -90,12 +85,15 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
 
     noCodeReceivedHelp.setOnClickListener(v -> sendEmailToSupport());
 
-    getModel().getSuccessfulCodeRequestAttempts().observe(this, (attempts) -> {
+    RegistrationViewModel model = getModel();
+    model.getSuccessfulCodeRequestAttempts().observe(this, (attempts) -> {
       if (attempts >= 3) {
         noCodeReceivedHelp.setVisibility(View.VISIBLE);
         scrollView.postDelayed(() -> scrollView.smoothScrollTo(0, noCodeReceivedHelp.getBottom()), 15000);
       }
     });
+
+    model.onStartEnterCode();
   }
 
   private void setOnCodeFullyEnteredListener(VerificationCodeView verificationCodeView) {
@@ -109,7 +107,7 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
 
       RegistrationService registrationService = RegistrationService.getInstance(model.getNumber().getE164Number(), model.getRegistrationSecret());
 
-      registrationService.verifyAccount(requireActivity(), model.getFcmToken(), code, null, null, null,
+      registrationService.verifyAccount(requireActivity(), model.getFcmToken(), code, null, null,
         new CodeVerificationRequest.VerifyCallback() {
 
           @Override
@@ -124,7 +122,7 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
 
           @Override
           public void onV1RegistrationLockPinRequiredOrIncorrect(long timeRemaining) {
-            model.setTimeRemaining(timeRemaining);
+            model.setLockedTimeRemaining(timeRemaining);
             keyboard.displayLocked().addListener(new AssertedSuccessListener<Boolean>() {
               @Override
               public void onSuccess(Boolean r) {
@@ -135,10 +133,9 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
           }
 
           @Override
-          public void onKbsRegistrationLockPinRequired(long timeRemaining, @NonNull TokenResponse tokenResponse, @NonNull String kbsStorageCredentials) {
-            model.setTimeRemaining(timeRemaining);
-            model.setStorageCredentials(kbsStorageCredentials);
-            model.setKeyBackupCurrentToken(tokenResponse);
+          public void onKbsRegistrationLockPinRequired(long timeRemaining, @NonNull PinRestoreRepository.TokenData tokenData, @NonNull String kbsStorageCredentials) {
+            model.setLockedTimeRemaining(timeRemaining);
+            model.setKeyBackupTokenData(tokenData);
             keyboard.displayLocked().addListener(new AssertedSuccessListener<Boolean>() {
               @Override
               public void onSuccess(Boolean r) {
@@ -149,7 +146,7 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
           }
 
           @Override
-          public void onIncorrectKbsRegistrationLockPin(@NonNull TokenResponse tokenResponse) {
+          public void onIncorrectKbsRegistrationLockPin(@NonNull PinRestoreRepository.TokenData tokenData) {
             throw new AssertionError("Unexpected, user has made no pin guesses");
           }
 
@@ -175,7 +172,7 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
           @Override
           public void onKbsAccountLocked(@Nullable Long timeRemaining) {
             if (timeRemaining != null) {
-              model.setTimeRemaining(timeRemaining);
+              model.setLockedTimeRemaining(timeRemaining);
             }
             Navigation.findNavController(requireView()).navigate(RegistrationLockFragmentDirections.actionAccountLocked());
           }
@@ -254,11 +251,11 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
   }
 
   private void handlePhoneCallRequest() {
-    callMeCountDown.startCountDown(RegistrationConstants.SUBSEQUENT_CALL_AVAILABLE_AFTER);
-
     RegistrationViewModel model   = getModel();
     String                captcha = model.getCaptchaToken();
     model.clearCaptchaResponse();
+
+    model.onCallRequested();
 
     NavController navController = Navigation.findNavController(callMeCountDown);
 
@@ -276,6 +273,11 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
         public void requestSent(@Nullable String fcmToken) {
           model.setFcmToken(fcmToken);
           model.markASuccessfulAttempt();
+        }
+
+        @Override
+        public void onRateLimited() {
+          Toast.makeText(requireContext(), R.string.RegistrationActivity_rate_limited_to_service, Toast.LENGTH_LONG).show();
         }
 
         @Override
@@ -301,9 +303,10 @@ public final class EnterCodeFragment extends BaseRegistrationFragment {
   public void onResume() {
     super.onResume();
 
-    getModel().getLiveNumber().observe(this, (s) -> header.setText(requireContext().getString(R.string.RegistrationActivity_enter_the_code_we_sent_to_s, s.getFullFormattedNumber())));
+    RegistrationViewModel model = getModel();
+    model.getLiveNumber().observe(this, (s) -> header.setText(requireContext().getString(R.string.RegistrationActivity_enter_the_code_we_sent_to_s, s.getFullFormattedNumber())));
 
-    callMeCountDown.startCountDown(RegistrationConstants.FIRST_CALL_AVAILABLE_AFTER);
+    model.getCanCallAtTime().observe(this, callAtTime -> callMeCountDown.startCountDownTo(callAtTime));
   }
 
   private void sendEmailToSupport() {
