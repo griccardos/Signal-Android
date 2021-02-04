@@ -3,6 +3,7 @@ package org.thoughtcrime.securesms.registration.fragments;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -12,6 +13,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.annotation.StringRes;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
@@ -22,8 +24,8 @@ import com.dd.CircularProgressButton;
 import com.google.i18n.phonenumbers.PhoneNumberUtil;
 import com.google.i18n.phonenumbers.Phonenumber;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.permissions.Permissions;
 import org.thoughtcrime.securesms.registration.viewmodel.RegistrationViewModel;
 import org.thoughtcrime.securesms.util.BackupUtil;
@@ -41,9 +43,18 @@ public final class WelcomeFragment extends BaseRegistrationFragment {
                                                                         Manifest.permission.WRITE_EXTERNAL_STORAGE,
                                                                         Manifest.permission.READ_EXTERNAL_STORAGE,
                                                                         Manifest.permission.READ_PHONE_STATE };
+  @RequiresApi(26)
+  private static final            String[]       PERMISSIONS_API_26 = { Manifest.permission.WRITE_CONTACTS,
+                                                                        Manifest.permission.READ_CONTACTS,
+                                                                        Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                                                                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                                                                        Manifest.permission.READ_PHONE_STATE,
+                                                                        Manifest.permission.READ_PHONE_NUMBERS };
+  @RequiresApi(26)
   private static final            String[]       PERMISSIONS_API_29 = { Manifest.permission.WRITE_CONTACTS,
                                                                         Manifest.permission.READ_CONTACTS,
-                                                                        Manifest.permission.READ_PHONE_STATE };
+                                                                        Manifest.permission.READ_PHONE_STATE,
+                                                                        Manifest.permission.READ_PHONE_NUMBERS };
   private static final @StringRes int            RATIONALE          = R.string.RegistrationActivity_signal_needs_access_to_your_contacts_and_media_in_order_to_connect_with_friends;
   private static final @StringRes int            RATIONALE_API_29   = R.string.RegistrationActivity_signal_needs_access_to_your_contacts_in_order_to_connect_with_friends;
   private static final            int[]          HEADERS            = { R.drawable.ic_contacts_white_48dp, R.drawable.ic_folder_white_48dp };
@@ -173,17 +184,24 @@ public final class WelcomeFragment extends BaseRegistrationFragment {
   private void initializeNumber() {
     Optional<Phonenumber.PhoneNumber> localNumber = Optional.absent();
 
-    if (Permissions.hasAll(requireContext(), Manifest.permission.READ_PHONE_STATE)) {
+    if (Permissions.hasAll(requireContext(), Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_PHONE_NUMBERS)) {
       localNumber = Util.getDeviceNumber(requireContext());
+    } else {
+      Log.i(TAG, "No phone permission");
     }
 
     if (localNumber.isPresent()) {
-      getModel().onNumberDetected(localNumber.get().getCountryCode(), localNumber.get().getNationalNumber());
+      Log.i(TAG, "Phone number detected");
+      Phonenumber.PhoneNumber phoneNumber    = localNumber.get();
+      String                  nationalNumber = PhoneNumberUtil.getInstance().format(phoneNumber, PhoneNumberUtil.PhoneNumberFormat.NATIONAL);
+
+      getModel().onNumberDetected(phoneNumber.getCountryCode(), nationalNumber);
     } else {
+      Log.i(TAG, "No number detected");
       Optional<String> simCountryIso = Util.getSimCountryIso(requireContext());
 
       if (simCountryIso.isPresent() && !TextUtils.isEmpty(simCountryIso.get())) {
-        getModel().onNumberDetected(PhoneNumberUtil.getInstance().getCountryCodeForRegion(simCountryIso.get()), 0);
+        getModel().onNumberDetected(PhoneNumberUtil.getInstance().getCountryCodeForRegion(simCountryIso.get()), "");
       }
     }
   }
@@ -198,8 +216,15 @@ public final class WelcomeFragment extends BaseRegistrationFragment {
            !TextSecurePreferences.isBackupEnabled(requireContext());
   }
 
+  @SuppressLint("NewApi")
   private static String[] getContinuePermissions(boolean isUserSelectionRequired) {
-    return isUserSelectionRequired ? PERMISSIONS_API_29 : PERMISSIONS;
+    if (isUserSelectionRequired) {
+      return PERMISSIONS_API_29;
+    } else if (Build.VERSION.SDK_INT >= 26) {
+      return PERMISSIONS_API_26;
+    } else {
+      return PERMISSIONS;
+    }
   }
 
   private static @StringRes int getContinueRationale(boolean isUserSelectionRequired) {

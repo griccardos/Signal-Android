@@ -26,7 +26,6 @@ import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.ImageProxy;
-import androidx.camera.core.impl.utils.executor.CameraXExecutors;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.camera.view.SignalCameraView;
@@ -36,10 +35,10 @@ import androidx.lifecycle.ViewModelProviders;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.util.Executors;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.LoggingFragment;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.TooltipPopup;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.mediasend.camerax.CameraXFlashToggleView;
 import org.thoughtcrime.securesms.mediasend.camerax.CameraXUtil;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader.DecryptableUri;
@@ -47,8 +46,6 @@ import org.thoughtcrime.securesms.mms.MediaConstraints;
 import org.thoughtcrime.securesms.util.MemoryFileDescriptor;
 import org.thoughtcrime.securesms.util.Stopwatch;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
-import org.thoughtcrime.securesms.util.ThemeUtil;
-import org.thoughtcrime.securesms.util.concurrent.SignalExecutors;
 import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
 import org.thoughtcrime.securesms.video.VideoUtil;
 import org.whispersystems.libsignal.util.guava.Optional;
@@ -133,6 +130,7 @@ public class CameraXFragment extends LoggingFragment implements CameraFragment {
   public void onResume() {
     super.onResume();
 
+    camera.bindToLifecycle(getViewLifecycleOwner());
     viewModel.onCameraStarted();
     requireActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
     requireActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
@@ -232,7 +230,7 @@ public class CameraXFragment extends LoggingFragment implements CameraFragment {
 
         camera.setCaptureMode(SignalCameraView.CaptureMode.MIXED);
 
-        int maxDuration = VideoUtil.getMaxVideoDurationInSeconds(requireContext(), viewModel.getMediaConstraints());
+        int maxDuration = VideoUtil.getMaxVideoRecordDurationInSeconds(requireContext(), viewModel.getMediaConstraints());
         Log.d(TAG, "Max duration: " + maxDuration + " sec");
 
         captureButton.setVideoCaptureListener(new CameraXVideoCaptureHelper(
@@ -269,7 +267,7 @@ public class CameraXFragment extends LoggingFragment implements CameraFragment {
                  "API: " + Build.VERSION.SDK_INT + ", " +
                  "MFD: " + MemoryFileDescriptor.supported() + ", " +
                  "Camera: " + CameraXUtil.getLowestSupportedHardwareLevel(requireContext()) + ", " +
-                 "MaxDuration: " + VideoUtil.getMaxVideoDurationInSeconds(requireContext(), viewModel.getMediaConstraints()) + " sec");
+                 "MaxDuration: " + VideoUtil.getMaxVideoRecordDurationInSeconds(requireContext(), viewModel.getMediaConstraints()) + " sec");
     }
 
     viewModel.onCameraControlsInitialized();
@@ -280,7 +278,7 @@ public class CameraXFragment extends LoggingFragment implements CameraFragment {
            requireArguments().getBoolean(IS_VIDEO_ENABLED, true) &&
            MediaConstraints.isVideoTranscodeAvailable()          &&
            CameraXUtil.isMixedModeSupported(context)             &&
-           VideoUtil.getMaxVideoDurationInSeconds(context, viewModel.getMediaConstraints()) > 0;
+           VideoUtil.getMaxVideoRecordDurationInSeconds(context, viewModel.getMediaConstraints()) > 0;
   }
 
   private void displayVideoRecordingTooltipIfNecessary(CameraButtonView captureButton) {

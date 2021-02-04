@@ -7,9 +7,9 @@ import android.os.ResultReceiver;
 import android.support.v4.media.MediaDescriptionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 
+import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import androidx.annotation.WorkerThread;
 
 import com.annimon.stream.Stream;
@@ -19,10 +19,10 @@ import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector;
 import com.google.android.exoplayer2.source.ConcatenatingMediaSource;
 
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.NoSuchMessageException;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.util.MessageRecordUtil;
 import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
@@ -97,9 +97,6 @@ final class VoiceNotePlaybackPreparer implements MediaSessionConnector.PlaybackP
     canLoadMore = false;
     latestUri   = uri;
 
-    queueDataAdapter.clear();
-    dataSource.clear();
-
     SimpleTask.run(EXECUTOR,
                    () -> {
                      if (singlePlayback) {
@@ -109,6 +106,9 @@ final class VoiceNotePlaybackPreparer implements MediaSessionConnector.PlaybackP
                      }
                    },
                    descriptions -> {
+                     queueDataAdapter.clear();
+                     dataSource.clear();
+
                      if (Util.hasItems(descriptions) && Objects.equals(latestUri, uri)) {
                        applyDescriptionsToQueue(descriptions);
 
@@ -139,6 +139,7 @@ final class VoiceNotePlaybackPreparer implements MediaSessionConnector.PlaybackP
   public void onCommand(Player player, String command, Bundle extras, ResultReceiver cb) {
   }
 
+  @MainThread
   private void applyDescriptionsToQueue(@NonNull List<MediaDescriptionCompat> descriptions) {
     for (MediaDescriptionCompat description : descriptions) {
       int                    holderIndex  = queueDataAdapter.indexOf(description.getMediaUri());
@@ -192,6 +193,10 @@ final class VoiceNotePlaybackPreparer implements MediaSessionConnector.PlaybackP
         dataSource.addMediaSource(lastIndex, mediaSourceFactory.createMediaSource(end));
       }
     }
+
+    if (queueDataAdapter.size() != dataSource.getSize()) {
+      throw new IllegalStateException("QueueDataAdapter and DataSource size inconsistency.");
+    }
   }
 
   private @NonNull MediaDescriptionCompat createEndClone(@NonNull MediaDescriptionCompat source) {
@@ -219,7 +224,11 @@ final class VoiceNotePlaybackPreparer implements MediaSessionConnector.PlaybackP
     }
 
     MediaDescriptionCompat mediaDescriptionCompat = queueDataAdapter.getMediaDescription(player.getCurrentWindowIndex());
-    long                   messageId              = mediaDescriptionCompat.getExtras().getLong(VoiceNoteMediaDescriptionCompatFactory.EXTRA_MESSAGE_ID);
+    if (Objects.equals(mediaDescriptionCompat, VoiceNoteQueueDataAdapter.EMPTY)) {
+      return;
+    }
+
+    long messageId = mediaDescriptionCompat.getExtras().getLong(VoiceNoteMediaDescriptionCompatFactory.EXTRA_MESSAGE_ID);
 
     SimpleTask.run(EXECUTOR,
                    () -> loadMediaDescriptionsForConsecutivePlayback(messageId),

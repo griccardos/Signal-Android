@@ -6,13 +6,14 @@ import android.os.ResultReceiver;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.signal.core.util.logging.Log;
 import org.signal.ringrtc.CallException;
 import org.signal.ringrtc.CallId;
+import org.signal.ringrtc.CallManager;
 import org.thoughtcrime.securesms.crypto.IdentityKeyUtil;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.events.CallParticipant;
 import org.thoughtcrime.securesms.events.WebRtcViewModel;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.ringrtc.IceCandidateParcel;
 import org.thoughtcrime.securesms.ringrtc.RemotePeer;
 import org.thoughtcrime.securesms.service.webrtc.WebRtcData.CallMetadata;
@@ -20,6 +21,7 @@ import org.thoughtcrime.securesms.service.webrtc.WebRtcData.OfferMetadata;
 import org.thoughtcrime.securesms.service.webrtc.state.VideoState;
 import org.thoughtcrime.securesms.service.webrtc.state.WebRtcServiceState;
 import org.thoughtcrime.securesms.service.webrtc.state.WebRtcServiceStateBuilder;
+import org.thoughtcrime.securesms.util.NetworkUtil;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.webrtc.audio.OutgoingRinger;
 import org.webrtc.PeerConnection;
@@ -117,6 +119,7 @@ public class OutgoingCallActionProcessor extends DeviceAwareActionProcessor {
                                                 videoState.requireCamera(),
                                                 iceServers,
                                                 isAlwaysTurn,
+                                                NetworkUtil.getCallingBandwidthMode(context),
                                                 currentState.getCallSetupState().isEnableVideoOnCreate());
     } catch (CallException e) {
       return callFailure(currentState, "Unable to proceed with call: ", e);
@@ -147,11 +150,15 @@ public class OutgoingCallActionProcessor extends DeviceAwareActionProcessor {
   {
     Log.i(TAG, "handleReceivedAnswer(): id: " + callMetadata.getCallId().format(callMetadata.getRemoteDevice()));
 
+    if (answerMetadata.getOpaque() == null) {
+      return callFailure(currentState, "receivedAnswer() failed: answerMetadata did not contain opaque", null);
+    }
+
     try {
       byte[] remoteIdentityKey = WebRtcUtil.getPublicKeyBytes(receivedAnswerMetadata.getRemoteIdentityKey());
       byte[] localIdentityKey  = WebRtcUtil.getPublicKeyBytes(IdentityKeyUtil.getIdentityKey(context).serialize());
 
-      webRtcInteractor.getCallManager().receivedAnswer(callMetadata.getCallId(), callMetadata.getRemoteDevice(), answerMetadata.getOpaque(), answerMetadata.getSdp(), receivedAnswerMetadata.isMultiRing(), remoteIdentityKey, localIdentityKey);
+      webRtcInteractor.getCallManager().receivedAnswer(callMetadata.getCallId(), callMetadata.getRemoteDevice(), answerMetadata.getOpaque(), receivedAnswerMetadata.isMultiRing(), remoteIdentityKey, localIdentityKey);
     } catch (CallException | InvalidKeyException e) {
       return callFailure(currentState, "receivedAnswer() failed: ", e);
     }
@@ -211,7 +218,7 @@ public class OutgoingCallActionProcessor extends DeviceAwareActionProcessor {
   }
 
   @Override
-  protected @NonNull WebRtcServiceState handleCallConcluded(@NonNull WebRtcServiceState currentState, @NonNull RemotePeer remotePeer) {
+  protected @NonNull WebRtcServiceState handleCallConcluded(@NonNull WebRtcServiceState currentState, @Nullable RemotePeer remotePeer) {
     return activeCallDelegate.handleCallConcluded(currentState, remotePeer);
   }
 

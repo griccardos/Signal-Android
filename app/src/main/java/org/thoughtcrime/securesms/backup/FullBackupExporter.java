@@ -12,12 +12,13 @@ import androidx.documentfile.provider.DocumentFile;
 
 import com.annimon.stream.function.Consumer;
 import com.annimon.stream.function.Predicate;
-import com.google.android.collect.Sets;
 import com.google.protobuf.ByteString;
 
 import net.sqlcipher.database.SQLiteDatabase;
 
 import org.greenrobot.eventbus.EventBus;
+import org.signal.core.util.Conversions;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.attachments.AttachmentId;
 import org.thoughtcrime.securesms.crypto.AttachmentSecret;
 import org.thoughtcrime.securesms.crypto.ClassicDecryptingPartInputStream;
@@ -35,9 +36,8 @@ import org.thoughtcrime.securesms.database.SessionDatabase;
 import org.thoughtcrime.securesms.database.SignedPreKeyDatabase;
 import org.thoughtcrime.securesms.database.SmsDatabase;
 import org.thoughtcrime.securesms.database.StickerDatabase;
-import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.profiles.AvatarHelper;
-import org.thoughtcrime.securesms.util.Conversions;
+import org.thoughtcrime.securesms.util.SetUtil;
 import org.thoughtcrime.securesms.util.Stopwatch;
 import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.libsignal.kdf.HKDFv3;
@@ -69,16 +69,12 @@ public class FullBackupExporter extends FullBackupBase {
   @SuppressWarnings("unused")
   private static final String TAG = FullBackupExporter.class.getSimpleName();
 
-  private static final Set<String> BLACKLISTED_TABLES = Sets.newHashSet(
+  private static final Set<String> BLACKLISTED_TABLES = SetUtil.newHashSet(
     SignedPreKeyDatabase.TABLE_NAME,
     OneTimePreKeyDatabase.TABLE_NAME,
     SessionDatabase.TABLE_NAME,
     SearchDatabase.SMS_FTS_TABLE_NAME,
-    SearchDatabase.MMS_FTS_TABLE_NAME,
-    JobDatabase.JOBS_TABLE_NAME,
-    JobDatabase.CONSTRAINTS_TABLE_NAME,
-    JobDatabase.DEPENDENCIES_TABLE_NAME,
-    KeyValueDatabase.TABLE_NAME
+    SearchDatabase.MMS_FTS_TABLE_NAME
   );
 
   public static void export(@NonNull Context context,

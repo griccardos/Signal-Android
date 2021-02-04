@@ -4,15 +4,16 @@ import android.content.Context;
 import android.media.AudioManager;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.signal.ringrtc.CallManager;
 import org.signal.ringrtc.GroupCall;
+import org.signal.ringrtc.PeekInfo;
 import org.thoughtcrime.securesms.events.WebRtcViewModel;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.webrtc.locks.LockManager;
 import org.whispersystems.libsignal.InvalidKeyException;
 import org.whispersystems.libsignal.ecc.Curve;
-import org.whispersystems.libsignal.ecc.DjbECPublicKey;
 import org.whispersystems.libsignal.ecc.ECPublicKey;
 import org.whispersystems.signalservice.api.messages.calls.OfferMessage;
 
@@ -25,11 +26,7 @@ public final class WebRtcUtil {
 
   public static @NonNull byte[] getPublicKeyBytes(@NonNull byte[] identityKey) throws InvalidKeyException {
     ECPublicKey key = Curve.decodePoint(identityKey, 0);
-
-    if (key instanceof DjbECPublicKey) {
-      return ((DjbECPublicKey) key).getPublicKey();
-    }
-    throw new InvalidKeyException();
+    return key.getPublicKeyBytes();
   }
 
   public static @NonNull LockManager.PhoneState getInCallPhoneState(@NonNull Context context) {
@@ -70,5 +67,18 @@ public final class WebRtcUtil {
       default:
         return WebRtcViewModel.GroupCallState.DISCONNECTED;
     }
+  }
+
+  public static @Nullable String getGroupCallEraId(@Nullable GroupCall groupCall) {
+    if (groupCall == null) {
+      return null;
+    }
+
+    PeekInfo peekInfo = groupCall.getPeekInfo();
+    return peekInfo != null ? peekInfo.getEraId() : null;
+  }
+
+  public static boolean isCallFull(@Nullable PeekInfo peekInfo) {
+    return peekInfo != null && peekInfo.getMaxDevices() != null && peekInfo.getDeviceCount() >= peekInfo.getMaxDevices();
   }
 }

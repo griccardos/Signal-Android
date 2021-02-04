@@ -14,7 +14,7 @@ import androidx.lifecycle.DefaultLifecycleObserver;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 
-import org.thoughtcrime.securesms.logging.Log;
+import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.util.ViewUtil;
 import org.webrtc.EglBase;
 import org.webrtc.EglRenderer;
@@ -88,6 +88,8 @@ public class TextureViewRenderer extends TextureView implements TextureView.Surf
     if (attachedVideoSink == videoSink) {
       return;
     }
+
+    eglRenderer.clearImage();
 
     if (attachedVideoSink != null) {
       attachedVideoSink.removeSink(this);
@@ -265,7 +267,9 @@ public class TextureViewRenderer extends TextureView implements TextureView.Surf
 
   @Override
   public void onFrame(VideoFrame videoFrame) {
-    eglRenderer.onFrame(videoFrame);
+    if (isAttachedToWindow()) {
+      eglRenderer.onFrame(videoFrame);
+    }
   }
 
   @Override
